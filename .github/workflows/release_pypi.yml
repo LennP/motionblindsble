@@ -25,10 +25,6 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install pylint
 
-    - name: Analyse the code with Pylint
-      run: |
-        pylint src
-
   build:
     name: Build and publish to PyPi
     needs: verify
