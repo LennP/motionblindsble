@@ -1,6 +1,6 @@
 """Constants for MotionBlinds BLE."""
 
-from enum import IntEnum, StrEnum
+from enum import IntEnum, Enum
 
 SETTING_MAX_CONNECT_ATTEMPTS = 5
 SETTING_MAX_COMMAND_ATTEMPTS = 5
@@ -16,20 +16,20 @@ EXCEPTION_NO_FAVORITE_POSITION = (
 )
 
 
-class MotionService(StrEnum):
+class MotionService(Enum):
     """Enum for the BLE service."""
 
     CONTROL = "d973f2e0-b19e-11e2-9e96-0800200c9a66"
 
 
-class MotionCharacteristic(StrEnum):
+class MotionCharacteristic(Enum):
     """Enum for the BLE characteristic."""
 
     COMMAND = "d973f2e2-b19e-11e2-9e96-0800200c9a66"
     NOTIFICATION = "d973f2e1-b19e-11e2-9e96-0800200c9a66"
 
 
-class MotionCommandType(StrEnum):
+class MotionCommandType(Enum):
     """Enum for the command type."""
 
     OPEN = "03020301"
@@ -47,14 +47,14 @@ class MotionCommandType(StrEnum):
     POINT_SET_QUERY = "03050120"
 
 
-class MotionNotificationType(StrEnum):
+class MotionNotificationType(Enum):
     """Enum for the notification type."""
 
     POSITION = "07040402"
     STATUS = "12040f02"
 
 
-class MotionConnectionType(StrEnum):
+class MotionConnectionType(Enum):
     """Enum for the connection type."""
 
     CONNECTED = "connected"
@@ -63,7 +63,7 @@ class MotionConnectionType(StrEnum):
     DISCONNECTING = "disconnecting"
 
 
-class MotionRunningType(StrEnum):
+class MotionRunningType(Enum):
     """Enum for the blind running type."""
 
     OPENING = "opening"
