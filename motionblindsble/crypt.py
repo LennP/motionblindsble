@@ -13,15 +13,15 @@ from pytz import timezone
 class MotionCrypt:
     """Used for the encryption & decryption of bluetooth messages."""
 
-    tz: tzinfo | None = None
+    _timezone: tzinfo | None = None
 
     encryption_key: bytes = b"a3q8r8c135sqbn66"
     cipher: EcbMode = AES.new(encryption_key, AES.MODE_ECB)
 
     @staticmethod
-    def set_timezone(tz: str) -> None:
+    def set_timezone(timezone_str: str) -> None:
         """Set the timezone for encryption, using a string like 'Europe/Amsterdam'."""
-        MotionCrypt.tz = timezone(tz)
+        MotionCrypt.timezone = timezone(timezone_str)
 
     @staticmethod
     def encrypt(plaintext_hex: str) -> str:
@@ -51,11 +51,11 @@ class MotionCrypt:
     @staticmethod
     def get_time() -> str:
         """Get the current time string."""
-        if not MotionCrypt.tz:
+        if not MotionCrypt._timezone:
             raise TimezoneNotSetException(
                 "Motion encryption requires a valid timezone."
             )
-        now = datetime.datetime.now(MotionCrypt.tz)
+        now = datetime.datetime.now(MotionCrypt._timezone)
 
         year = now.year % 100
         month = now.month
