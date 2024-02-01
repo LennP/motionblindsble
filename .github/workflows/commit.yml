@@ -1,4 +1,4 @@
-name: Verification
+name: Code analysis
 
 on:
   push:
@@ -26,13 +26,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade pylint flake8
+          python -m pip install --upgrade pytest pylint flake8
           python -m pip install -r requirements.txt
 
-      - name: Analysing the code with Pylint
+      - name: Test with PyTest
+        run: pytest --cov=motionblindsble --doctest-modules --cov=com --cov-report=xml --cov-report=html
+
+      - name: Analyse the code with Pylint
         run: |
           pylint motionblindsble
 
-      - name: Analysing the code with Flake8
+      - name: Analyse the code with Flake8
         run: |
           flake8 motionblindsble --count --exit-zero --max-line-length=130 --statistics

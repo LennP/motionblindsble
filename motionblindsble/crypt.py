@@ -7,21 +7,21 @@ from datetime import tzinfo
 from Crypto.Cipher import AES
 from Crypto.Cipher._mode_ecb import EcbMode
 from Crypto.Util.Padding import pad, unpad
-from pytz import timezone
+from pytz import timezone as parse_timezone
 
 
 class MotionCrypt:
     """Used for the encryption & decryption of bluetooth messages."""
 
-    _timezone: tzinfo | None = None
+    timezone: tzinfo | None = None
 
     encryption_key: bytes = b"a3q8r8c135sqbn66"
     cipher: EcbMode = AES.new(encryption_key, AES.MODE_ECB)
 
     @staticmethod
-    def set_timezone(timezone_str: str) -> None:
+    def set_timezone(timezone: str) -> None:
         """Set the timezone for encryption, using a string like 'Europe/Amsterdam'."""
-        MotionCrypt.timezone = timezone(timezone_str)
+        MotionCrypt.timezone = parse_timezone(timezone)
 
     @staticmethod
     def encrypt(plaintext_hex: str) -> str:
@@ -51,11 +51,11 @@ class MotionCrypt:
     @staticmethod
     def get_time() -> str:
         """Get the current time string."""
-        if not MotionCrypt._timezone:
+        if not MotionCrypt.timezone:
             raise TimezoneNotSetException(
                 "Motion encryption requires a valid timezone."
             )
-        now = datetime.datetime.now(MotionCrypt._timezone)
+        now = datetime.datetime.now(MotionCrypt.timezone)
 
         year = now.year % 100
         month = now.month
