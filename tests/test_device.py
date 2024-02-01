@@ -1,22 +1,21 @@
-from motionblindsble.device import (
-    MotionPositionInfo,
-    requires_end_positions,
-    requires_favorite_position,
-    requires_connection,
-    MotionDevice,
-    NoEndPositionsException,
-    NoFavoritePositionException,
-    ConnectionQueue,
-)
+"""Tests for the device.py module."""
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from unittest.mock import patch, AsyncMock, Mock
+from motionblindsble.device import (ConnectionQueue, MotionDevice,
+                                    MotionPositionInfo,
+                                    NoEndPositionsException,
+                                    NoFavoritePositionException,
+                                    requires_connection,
+                                    requires_end_positions,
+                                    requires_favorite_position)
 
 
 class TestDeviceDecorators:
     """Test the decorators in device.py module."""
 
-    async def test_requires_end_positions_success(self) -> None:
+    async def test_requires_end_positions(self) -> None:
+        """Tests the @requires_end_positions decorator."""        
         device = MotionDevice("00:11:22:33:44:55")
         device.end_position_info = MotionPositionInfo(
             0xFF, 0xFFFF
@@ -36,7 +35,8 @@ class TestDeviceDecorators:
         with pytest.raises(NoEndPositionsException):
             result = await mock_method(device)
 
-    async def test_requires_favorite_position_success(self) -> None:
+    async def test_requires_favorite_position(self) -> None:
+        """Tests the @requires_favorite_position decorator."""
         device = MotionDevice("00:11:22:33:44:55")
         device.end_position_info = MotionPositionInfo(
             0xFF, 0xFFFF
@@ -56,7 +56,8 @@ class TestDeviceDecorators:
         with pytest.raises(NoFavoritePositionException):
             await mock_method(device)
 
-    async def test_requires_connection_success(self) -> None:
+    async def test_requires_connection(self) -> None:
+        """Tests the @requires_connection decorator."""
         device = MotionDevice("00:11:22:33:44:55")
 
         @requires_connection
@@ -80,6 +81,7 @@ class TestDeviceConnectionQueue:
     """Test the ConnectionQueue in device.py module."""
 
     def test_connection_create_task(self) -> None:
+        """Tests the creation of a connection task."""
         connection_queue = ConnectionQueue()
         device = MotionDevice("00:11:22:33:44:55")
 

@@ -1,3 +1,5 @@
+"""Tests for the const.py module."""
+
 class TestConst:
     """Test the const.py module."""
 
@@ -5,7 +7,7 @@ class TestConst:
         """Test importing the constants module."""
         # Attempt to import the module
         try:
-            import motionblindsble.const  # noqa
+            import motionblindsble.const  # noqa # pylint: disable=unused-import, import-outside-toplevel
 
             success = True
         except ImportError:

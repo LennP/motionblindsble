@@ -1,7 +1,9 @@
-from unittest.mock import patch, MagicMock
-from motionblindsble.crypt import MotionCrypt, TimezoneNotSetException
+"""Tests for the crypt.py module."""
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+
 import pytest
+from motionblindsble.crypt import MotionCrypt, TimezoneNotSetException
 
 
 class TestCrypt:
