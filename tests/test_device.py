@@ -2,13 +2,16 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from motionblindsble.device import (ConnectionQueue, MotionDevice,
-                                    MotionPositionInfo,
-                                    NoEndPositionsException,
-                                    NoFavoritePositionException,
-                                    requires_connection,
-                                    requires_end_positions,
-                                    requires_favorite_position)
+from motionblindsble.device import (
+    ConnectionQueue,
+    MotionDevice,
+    MotionPositionInfo,
+    NoEndPositionsException,
+    NoFavoritePositionException,
+    requires_connection,
+    requires_end_positions,
+    requires_favorite_position,
+)
 
 
 class TestDeviceDecorators:
@@ -65,13 +68,15 @@ class TestDeviceDecorators:
             return True
 
         with patch(
-            "motionblindsble.device.MotionDevice.connect", AsyncMock(return_value=True)
+            "motionblindsble.device.MotionDevice.connect",
+            AsyncMock(return_value=True),
         ):
             result = await mock_method(device)
             assert result
 
         with patch(
-            "motionblindsble.device.MotionDevice.connect", AsyncMock(return_value=False)
+            "motionblindsble.device.MotionDevice.connect",
+            AsyncMock(return_value=False),
         ):
             result = await mock_method(device)
             assert not result
@@ -87,7 +92,8 @@ class TestDeviceConnectionQueue:
 
         # Test creation of connect task
         with patch(
-            "motionblindsble.device.establish_connection", AsyncMock(return_value=True)
+            "motionblindsble.device.establish_connection",
+            AsyncMock(return_value=True),
         ):
             connection_queue._create_connection_task(device)
 
@@ -96,7 +102,8 @@ class TestDeviceConnectionQueue:
         connection_queue.set_ha_create_task(mock_ha_create_task)
         assert connection_queue._ha_create_task is not None
         with patch(
-            "motionblindsble.device.establish_connection", AsyncMock(return_value=True)
+            "motionblindsble.device.establish_connection",
+            AsyncMock(return_value=True),
         ):
             connection_queue._create_connection_task(device)
         mock_ha_create_task.assert_called()
