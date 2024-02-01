@@ -20,7 +20,7 @@ class MotionCrypt:
 
     @staticmethod
     def set_timezone(timezone: str) -> None:
-        """Set the timezone for encryption, using a string like 'Europe/Amsterdam'."""
+        """Set the timezone for encryption, such as 'Europe/Amsterdam'."""
         MotionCrypt.timezone = parse_timezone(timezone)
 
     @staticmethod
@@ -45,8 +45,10 @@ class MotionCrypt:
 
     @staticmethod
     def _format_hex(number: int, number_of_chars: int = 2) -> str:
-        """Format a number as a hex string with a given number of characters."""
-        return hex(number & 2 ** (number_of_chars * 4) - 1)[2:].zfill(number_of_chars)
+        """Format a number as a hex string with set number of characters."""
+        return hex(number & 2 ** (number_of_chars * 4) - 1)[2:].zfill(
+            number_of_chars
+        )
 
     @staticmethod
     def get_time() -> str:
@@ -71,7 +73,9 @@ class MotionCrypt:
         hour_hex = MotionCrypt._format_hex(hour)
         minute_hex = MotionCrypt._format_hex(minute)
         second_hex = MotionCrypt._format_hex(second)
-        microsecond_hex = MotionCrypt._format_hex(microsecond, number_of_chars=4)
+        microsecond_hex = MotionCrypt._format_hex(
+            microsecond, number_of_chars=4
+        )
 
         return (
             year_hex
