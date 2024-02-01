@@ -15,7 +15,7 @@ class TestDeviceDecorators:
     """Test the decorators in device.py module."""
 
     async def test_requires_end_positions(self) -> None:
-        """Tests the @requires_end_positions decorator."""        
+        """Tests the @requires_end_positions decorator."""
         device = MotionDevice("00:11:22:33:44:55")
         device.end_position_info = MotionPositionInfo(
             0xFF, 0xFFFF

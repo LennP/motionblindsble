@@ -1,5 +1,6 @@
 """Tests for the const.py module."""
 
+
 class TestConst:
     """Test the const.py module."""
 
