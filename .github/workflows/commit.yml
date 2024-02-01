@@ -30,7 +30,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Test with PyTest
-        run: pytest --cov=motionblindsble --doctest-modules --cov=com --cov-report=xml --cov-report=html
+        run: pytest --cov=motionblindsble --doctest-modules
 
       - name: Analyse the code with Pylint
         run: |
