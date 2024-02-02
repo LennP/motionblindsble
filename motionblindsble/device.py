@@ -512,9 +512,6 @@ class MotionDevice:
                     return True
                 return False
             except BleakError as e:
-                if number_of_tries == SETTING_MAX_COMMAND_ATTEMPTS:
-                    await self.disconnect()
-                    raise e
                 _LOGGER.warning(
                     "(%s) Could not send message (try #%i): %s",
                     self.device_address,
