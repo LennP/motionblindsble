@@ -167,8 +167,8 @@ class TestDeviceConnection:
 
         # Test establish normal connection
         await device.establish_connection()
-        device._current_bleak_client\
-            .set_disconnected_callback.assert_called_once()
+        device._current_bleak_client.set_disconnected_callback \
+            .assert_called_once()
         device.refresh_disconnect_timer: Mock
         device.refresh_disconnect_timer.assert_called()
         mock_set_connection.assert_has_calls(
@@ -178,13 +178,53 @@ class TestDeviceConnection:
             ]
         )
 
+        # Test establish connection if already connecting
+        device._connection_type = MotionConnectionType.CONNECTING
+        assert not await device.establish_connection()
+        device._connection_type = None
+
         # Test establish connection with notification delay
         await device.establish_connection(use_notification_delay=True)
         mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
 
+    @patch("motionblindsble.device.MotionDevice.set_connection")
+    async def test_disconnect(self, mock_set_connection) -> None:
+        """Test the disconnect function."""
+        device = MotionDevice("00:11:22:33:44:55")
+
+        # Test disconnecting when connected
+        current_bleak_client = AsyncMock()
+        device._current_bleak_client = current_bleak_client
+
+        def side_effect_disconnect(*args, **kwargs):
+            device._disconnect_callback(
+                device._current_bleak_client, *args, **kwargs
+            )
+
+        device._current_bleak_client.disconnect.side_effect = (
+            side_effect_disconnect
+        )
+        await device.disconnect()
+        mock_set_connection.assert_has_calls(
+            [
+                call(MotionConnectionType.DISCONNECTING),
+                call(MotionConnectionType.DISCONNECTED),
+            ]
+        )
+        current_bleak_client.disconnect.assert_called_once()
+
+        # Test disconnecting when BleakClient is None
+        device._current_bleak_client = None
+        assert not await device.disconnect()
+
+        # Test disconnecting when connecting
+        device._connection_queue = Mock()
+        assert not await device.disconnect()
+        device._connection_queue.cancel.assert_called_once()
+
 
 class TestDevice:
-    """Test the Device commands in device.py module."""
+    """Test the Device in device.py module."""
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
     async def test_notification_callback(self) -> None:
@@ -286,59 +326,66 @@ class TestDevice:
         assert device.end_position_info is not None
         assert device._position_callback.call_count == 2
 
-    async def test_send_command(self) -> None:
+        # Test with invalid arguments
+        device._notification_callback(
+            None,
+            bytearray.fromhex(
+                MotionNotificationType.STATUS.value
+                + "02"
+                + "00"
+                + "00"
+                + "00"
+                + "00000000"
+                + "04"
+                + "00"
+                + "0000"
+                + "00"
+                + "0A"
+            ),
+        )
+        device._status_callback.assert_called_with(
+            0, 0, 10, None, device.end_position_info
+        )
+
+    @patch("motionblindsble.device.MotionCrypt.encrypt", return_value="AA")
+    @patch("motionblindsble.device.MotionCrypt.decrypt", return_value="AA")
+    @patch("motionblindsble.device.MotionCrypt.get_time", return_value="AA")
+    async def test_send_command(
+        self, mock_get_time, mock_decrypt, mock_encrypt
+    ) -> None:
         """Test sending a command."""
         device = MotionDevice("00:11:22:33:44:55")
 
-        # Test sending command success
-        with patch(
-            "motionblindsble.device.MotionCrypt", Mock()
-        ) as MotionCryptMock:
-            MotionCryptMock.encrypt.return_value = "AA"
-            MotionCryptMock.decrypt.return_value = "AA"
-            MotionCryptMock.get_time.return_value = "AA"
+        # Test sending command without BleakClient
+        device._current_bleak_client = None
+        assert not await device._send_command("0011223344556677889900")
 
-            device._current_bleak_client = AsyncMock(return_value=True)
-            assert await device._send_command("0011223344556677889900")
-            device._current_bleak_client.write_gatt_char.assert_called_once()
+        # Test sending command success
+        device._current_bleak_client = AsyncMock(return_value=True)
+        assert await device._send_command("0011223344556677889900")
+        device._current_bleak_client.write_gatt_char.assert_called_once()
 
         # Test sending success after SETTING_MAX_COMMAND_ATTEMPTS tries
-        with patch(
-            "motionblindsble.device.MotionCrypt", Mock()
-        ) as MotionCryptMock:
-            MotionCryptMock.encrypt.return_value = "AA"
-            MotionCryptMock.decrypt.return_value = "AA"
-            MotionCryptMock.get_time.return_value = "AA"
-
-            device._current_bleak_client = AsyncMock()
-            device._current_bleak_client.write_gatt_char.side_effect = [
-                BleakError
-            ] * (SETTING_MAX_COMMAND_ATTEMPTS - 1) + [True]
-            assert await device._send_command("0011223344556677889900")
-            device._current_bleak_client.write_gatt_char.assert_called()
-            assert (
-                device._current_bleak_client.write_gatt_char.call_count
-                == SETTING_MAX_COMMAND_ATTEMPTS
-            )
+        device._current_bleak_client = AsyncMock()
+        device._current_bleak_client.write_gatt_char.side_effect = [
+            BleakError
+        ] * (SETTING_MAX_COMMAND_ATTEMPTS - 1) + [True]
+        assert await device._send_command("0011223344556677889900")
+        device._current_bleak_client.write_gatt_char.assert_called()
+        assert (
+            device._current_bleak_client.write_gatt_char.call_count
+            == SETTING_MAX_COMMAND_ATTEMPTS
+        )
 
         # Test sending fail after SETTING_MAX_COMMAND_ATTEMPTS tries
-        with patch(
-            "motionblindsble.device.MotionCrypt", Mock()
-        ) as MotionCryptMock:
-            MotionCryptMock.encrypt.return_value = "AA"
-            MotionCryptMock.decrypt.return_value = "AA"
-            MotionCryptMock.get_time.return_value = "AA"
-
-            device._current_bleak_client = AsyncMock()
-            device._current_bleak_client.write_gatt_char.side_effect = (
-                BleakError
-            )
-            assert not await device._send_command("0011223344556677889900")
-            device._current_bleak_client.write_gatt_char.assert_called()
-            assert (
-                device._current_bleak_client.write_gatt_char.call_count
-                == SETTING_MAX_COMMAND_ATTEMPTS
-            )
+        device._current_bleak_client = AsyncMock()
+        device._current_bleak_client.write_gatt_char.side_effect = BleakError
+        assert not await device._send_command("0011223344556677889900")
+        device._current_bleak_client.write_gatt_char.assert_called()
+        assert (
+            device._current_bleak_client.write_gatt_char.call_count
+            == SETTING_MAX_COMMAND_ATTEMPTS
+        )
 
     @patch(
         "motionblindsble.device.MotionDevice.connect",
