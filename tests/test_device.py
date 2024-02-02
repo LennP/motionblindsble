@@ -1,12 +1,17 @@
 """Tests for the device.py module."""
 
+import asyncio
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 from motionblindsble.device import (
+    SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
     BleakError,
+    BleakNotFoundError,
+    BleakOutOfConnectionSlotsError,
+    BLEDevice,
     ConnectionQueue,
     MotionConnectionType,
     MotionDevice,
@@ -66,7 +71,8 @@ class TestDeviceDecorators:
         with pytest.raises(NoFavoritePositionException):
             await mock_method(device)
 
-    async def test_requires_connection(self) -> None:
+    @patch("motionblindsble.device.MotionDevice.connect")
+    async def test_requires_connection(self, mock_connect) -> None:
         """Test the @requires_connection decorator."""
         device = MotionDevice("00:11:22:33:44:55")
 
@@ -74,19 +80,11 @@ class TestDeviceDecorators:
         async def mock_method(self, ignore_end_positions_not_set=False):
             return True
 
-        with patch(
-            "motionblindsble.device.MotionDevice.connect",
-            AsyncMock(return_value=True),
-        ):
-            result = await mock_method(device)
-            assert result
+        mock_connect.return_value = True
+        assert await mock_method(device)
 
-        with patch(
-            "motionblindsble.device.MotionDevice.connect",
-            AsyncMock(return_value=False),
-        ):
-            result = await mock_method(device)
-            assert not result
+        mock_connect.return_value = False
+        assert not await mock_method(device)
 
 
 class TestDeviceConnection:
@@ -115,23 +113,65 @@ class TestDeviceConnection:
             connection_queue._create_connection_task(device)
         mock_ha_create_task.assert_called()
 
-    # async def test_wait_for_connection(self) -> None:
-    #     """Tests waiting for a connection."""
-    #     pass
-    #     connection_queue = ConnectionQueue()
-    #     device = MotionDevice("00:11:22:33:44:55")
+    @patch("motionblindsble.device.ConnectionQueue._create_connection_task")
+    @patch("motionblindsble.device.wait")
+    async def test_wait_for_connection(
+        self, mock_wait, mock_create_connection_task
+    ) -> None:
+        """Tests waiting for a connection."""
+        connection_queue = ConnectionQueue()
+        device = MotionDevice("00:11:22:33:44:55")
 
-    #     Test creation of connection
-    #     with patch(
-    #         "motionblindsble.device.ConnectionQueue._create_connection_task",
-    #         AsyncMock(return_value=True),
-    #     ):
-    #         can_execute_command = await connection_queue \
-    #             .wait_for_connection(device)
-    #         assert can_execute_command
-    #         assert connection_queue._connection_task is None
+        connection_task = Mock()
+        mock_create_connection_task.return_value = connection_task
 
-    async def test_wait_for_connection(self) -> None:
+        async def mock_wait_return_connection_task(tasks, return_when):
+            return ([tasks[0]], None)
+
+        async def mock_wait_return_cancel(tasks, return_when):
+            return ([tasks[1]], None)
+
+        # Test creation of connection
+        connection_task.result.return_value = True
+        mock_wait.side_effect = mock_wait_return_connection_task
+        can_execute_command = await connection_queue.wait_for_connection(
+            device
+        )
+        assert can_execute_command
+        assert connection_queue._connection_task is None
+
+        # Test creation of connection fails
+        connection_task.result.return_value = False
+        mock_wait.side_effect = mock_wait_return_connection_task
+        can_execute_command = await connection_queue.wait_for_connection(
+            device
+        )
+        assert not can_execute_command
+        assert connection_queue._connection_task is None
+
+        # Test creation of connection cancelled
+        connection_task.result.return_value = True
+        mock_wait.side_effect = mock_wait_return_cancel
+        can_execute_command = await connection_queue.wait_for_connection(
+            device
+        )
+        assert not can_execute_command
+        assert connection_queue._connection_task is not None
+
+        # Test creation of connection with exception
+        exceptions = [BleakOutOfConnectionSlotsError, BleakNotFoundError]
+        for exception in exceptions:
+            connection_task.result.side_effect = exception
+            mock_wait.side_effect = mock_wait_return_connection_task
+            with pytest.raises(exception):
+                can_execute_command = (
+                    await connection_queue.wait_for_connection(device)
+                )
+            assert not can_execute_command
+            assert connection_queue._connection_task is None
+            assert device._connection_type is MotionConnectionType.DISCONNECTED
+
+    async def test_cancel(self) -> None:
         """Test cancelling a connection task."""
         connection_queue = ConnectionQueue()
 
@@ -222,9 +262,78 @@ class TestDeviceConnection:
         assert not await device.disconnect()
         device._connection_queue.cancel.assert_called_once()
 
+    @patch("motionblindsble.device.MotionDevice.disconnect")
+    @patch("motionblindsble.device.time_ns")
+    async def test_refresh_disconnect_timer(
+        self, mock_time_ns, mock_disconnect
+    ) -> None:
+        """Test the refresh_disconnect_timer function."""
+        device = MotionDevice("00:11:22:33:44:55")
+        mock_time_ns.return_value = 0
+
+        assert device._disconnect_time is None
+        assert device._disconnect_timer is None
+
+        # Test creating a disconnect timer
+        device.refresh_disconnect_timer()
+        assert device._disconnect_time == SETTING_DISCONNECT_TIME * 1e3
+        assert device._disconnect_timer is not None
+
+        # Test creating a disconnect timer with custom disconnect time
+        CUSTOM_DISCONNECT_TIME = 999
+        device.refresh_disconnect_timer(timeout=CUSTOM_DISCONNECT_TIME)
+        assert device._disconnect_time == CUSTOM_DISCONNECT_TIME * 1e3
+
+        # Test creating a disconnect timer, with and without force
+        device._disconnect_time = float("inf")
+        device.refresh_disconnect_timer()
+        assert device._disconnect_time == float("inf")
+        device.refresh_disconnect_timer(force=True)
+        assert device._disconnect_time == SETTING_DISCONNECT_TIME * 1e3
+
+        # Test with _ha_call_later and _disconnect_later:
+        def call_later(delay: int, action):
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(action())
+            else:
+                asyncio.run(action())
+
+        device._ha_call_later = Mock(side_effect=call_later)
+        device.refresh_disconnect_timer()
+        device._ha_call_later.assert_called_once()
+
+        await asyncio.sleep(
+            0
+        )  # Wait for _disconnect_later to finish in event loop
+        mock_disconnect.assert_called_once()
+
 
 class TestDevice:
     """Test the Device in device.py module."""
+
+    def test_init(self) -> None:
+        """Test initializing a MotionDevice."""
+        ble_device1 = BLEDevice(
+            "00:11:22:33:44:55", "00:11:22:33:44:55", {}, rssi=0
+        )
+        ble_device2 = BLEDevice(
+            "00:11:22:33:44:55", "00:11:22:33:44:55", {}, rssi=0
+        )
+        MotionDevice("00:11:22:33:44:55")
+        device = MotionDevice("00:11:22:33:44:55", ble_device1)
+        device.set_ble_device(ble_device2)
+        assert device._ble_device == ble_device2
+
+    def test_setters(self) -> None:
+        """Test initializing a MotionDevice."""
+        device = MotionDevice("00:11:22:33:44:55")
+        mock = Mock()
+        mock2 = Mock()
+        device.set_ha_create_task(mock)
+        device.set_ha_call_later(mock2)
+        assert device._connection_queue._ha_create_task is mock
+        assert device._ha_call_later is mock2
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
     async def test_notification_callback(self) -> None:
@@ -443,6 +552,8 @@ class TestDevice:
         device.register_connection_callback(connection_callback)
         device._connection_callback()
         device._connection_callback.assert_called_once()
+        device.set_connection(MotionConnectionType.CONNECTED)
+        assert device._connection_type is MotionConnectionType.CONNECTED
 
         status_callback = Mock()
         device.register_status_callback(status_callback)
