@@ -35,7 +35,7 @@ jobs:
       - name: Generate PyTest coverage badge
         uses: tj-actions/coverage-badge-py@v2
         with:
-          output: './.github/badges/coverage.svg'
+          output: '.github/badges/coverage.svg'
 
       - name: Get last commit message
         run: |
