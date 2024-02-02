@@ -29,6 +29,10 @@ from motionblindsble.device import (
 class TestDeviceDecorators:
     """Test the decorators in device.py module."""
 
+    @patch(
+        "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
+        Mock(),
+    )
     async def test_requires_end_positions(self) -> None:
         """Test the @requires_end_positions decorator."""
         device = MotionDevice("00:11:22:33:44:55")
@@ -50,6 +54,10 @@ class TestDeviceDecorators:
         with pytest.raises(NoEndPositionsException):
             result = await mock_method(device)
 
+    @patch(
+        "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
+        Mock(),
+    )
     async def test_requires_favorite_position(self) -> None:
         """Test the @requires_favorite_position decorator."""
         device = MotionDevice("00:11:22:33:44:55")
@@ -196,7 +204,7 @@ class TestDeviceConnection:
 
     @patch(
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
-        Mock(return_value=True),
+        Mock(),
     )
     @patch(
         "motionblindsble.device.MotionDevice._send_command",
