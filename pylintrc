@@ -2,7 +2,6 @@
 reports=no
 
 disable=
-  line-too-long,
   invalid-name,
   protected-access,
   broad-except,
