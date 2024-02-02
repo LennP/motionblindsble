@@ -384,7 +384,7 @@ class MotionDevice:
             self.end_position_info: MotionPositionInfo = MotionPositionInfo(
                 decrypted_message_bytes[4],
                 int.from_bytes(
-                    [decrypted_message_bytes[14], decrypted_message_bytes[15]]
+                    [decrypted_message_bytes[14], decrypted_message_bytes[15]], 'little'
                 ),
             )
             try:
