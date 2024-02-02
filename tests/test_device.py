@@ -185,6 +185,15 @@ class TestDeviceConnection:
         connection_task.cancel.assert_called_once()
         assert connection_queue._connection_task is None
 
+    async def test_cancel_disconnect_timer(self) -> None:
+        """Test cancelling a disconnect timer."""
+        device = MotionDevice("00:11:22:33:44:55")
+
+        # Test with normal disconnect timer
+        device._disconnect_timer = Mock()
+        device.cancel_disconnect_timer()
+        device._disconnect_timer.assert_called_once()
+
     @patch(
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
         Mock(return_value=True),
@@ -226,6 +235,36 @@ class TestDeviceConnection:
         # Test establish connection with notification delay
         await device.establish_connection(use_notification_delay=True)
         mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
+
+    @patch("motionblindsble.device.MotionDevice.is_connected")
+    @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")
+    @patch("motionblindsble.device.MotionDevice.refresh_disconnect_timer")
+    async def test_connect(
+        self,
+        mock_refresh_disconnect_timer,
+        mock_wait_for_connection,
+        mock_is_connected,
+    ) -> None:
+        """Test the connect function."""
+        device = MotionDevice("00:11:22:33:44:55")
+
+        # Test connect success
+        mock_is_connected.return_value = False
+        mock_wait_for_connection.return_value = True
+        assert await device.connect()
+
+        # Test connect failure
+        mock_is_connected.return_value = False
+        mock_wait_for_connection.return_value = False
+        assert not await device.connect()
+
+        # Test connect when connected
+        mock_is_connected.return_value = True
+        mock_wait_for_connection.return_value = True
+        assert await device.connect()
+
+        assert mock_refresh_disconnect_timer.call_count == 1
+        assert mock_wait_for_connection.call_count == 2
 
     @patch("motionblindsble.device.MotionDevice.set_connection")
     async def test_disconnect(self, mock_set_connection) -> None:
