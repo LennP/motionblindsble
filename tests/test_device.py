@@ -1,16 +1,24 @@
 """Tests for the device.py module."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
-from motionblindsble.device import (SETTING_MAX_COMMAND_ATTEMPTS, BleakError,
-                                    ConnectionQueue, MotionDevice,
-                                    MotionPositionInfo, MotionSpeedLevel,
-                                    NoEndPositionsException,
-                                    NoFavoritePositionException,
-                                    requires_connection,
-                                    requires_end_positions,
-                                    requires_favorite_position)
+from motionblindsble.device import (
+    SETTING_MAX_COMMAND_ATTEMPTS,
+    SETTING_NOTIFICATION_DELAY,
+    BleakError,
+    ConnectionQueue,
+    MotionConnectionType,
+    MotionDevice,
+    MotionNotificationType,
+    MotionPositionInfo,
+    MotionSpeedLevel,
+    NoEndPositionsException,
+    NoFavoritePositionException,
+    requires_connection,
+    requires_end_positions,
+    requires_favorite_position,
+)
 
 
 class TestDeviceDecorators:
@@ -81,8 +89,8 @@ class TestDeviceDecorators:
             assert not result
 
 
-class TestDeviceConnectionQueue:
-    """Test the ConnectionQueue in device.py module."""
+class TestDeviceConnection:
+    """Test the ConnectionQueue & establish_connection in device.py module."""
 
     def test_create_connection_task(self) -> None:
         """Test the creation of a connection task."""
@@ -137,9 +145,146 @@ class TestDeviceConnectionQueue:
         connection_task.cancel.assert_called_once()
         assert connection_queue._connection_task is None
 
+    @patch(
+        "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
+        Mock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice._send_command",
+        AsyncMock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.establish_connection",
+        AsyncMock(return_value=AsyncMock()),
+    )
+    @patch("motionblindsble.device.sleep")
+    @patch("motionblindsble.device.MotionDevice.set_connection")
+    async def test_establish_connection(
+        self, mock_set_connection, mock_sleep
+    ) -> None:
+        """Test the establish_connection function."""
+        device = MotionDevice("00:11:22:33:44:55")
+
+        # Test establish normal connection
+        await device.establish_connection()
+        device._current_bleak_client\
+            .set_disconnected_callback.assert_called_once()
+        device.refresh_disconnect_timer: Mock
+        device.refresh_disconnect_timer.assert_called()
+        mock_set_connection.assert_has_calls(
+            [
+                call(MotionConnectionType.CONNECTING),
+                call(MotionConnectionType.CONNECTED),
+            ]
+        )
+
+        # Test establish connection with notification delay
+        await device.establish_connection(use_notification_delay=True)
+        mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
+
 
 class TestDevice:
     """Test the Device commands in device.py module."""
+
+    @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
+    async def test_notification_callback(self) -> None:
+        """Test the notification callback."""
+        device = MotionDevice("00:11:22:33:44:55")
+        device._position_callback = Mock()
+        device._status_callback = Mock()
+
+        # Test POSITION notification with end positions
+        device._notification_callback(
+            None,
+            bytearray.fromhex(
+                MotionNotificationType.POSITION.value
+                + "02"
+                + "00"
+                + "64"
+                + "B4"
+            ),
+        )
+        device._position_callback.assert_called_once_with(
+            100, 100, device.end_position_info
+        )
+        assert (
+            not device.end_position_info.up
+            and not device.end_position_info.down
+            and device.end_position_info.favorite is None
+        )
+
+        # Test POSITION notification without end positions
+        device._notification_callback(
+            None,
+            bytearray.fromhex(
+                MotionNotificationType.POSITION.value
+                + "0c"
+                + "00"
+                + "00"
+                + "00"
+            ),
+        )
+        device._position_callback.assert_called_with(
+            0, 0, device.end_position_info
+        )
+        assert device._position_callback.call_count == 2
+        assert (
+            device.end_position_info.up
+            and device.end_position_info.down
+            and device.end_position_info.favorite is None
+        )
+
+        # Test STATUS notification with end positions
+        device.end_position_info = None
+        device._notification_callback(
+            None,
+            bytearray.fromhex(
+                MotionNotificationType.STATUS.value
+                + "0C"
+                + "00"
+                + "64"
+                + "B4"
+                + "00000000"
+                + "02"
+                + "00"
+                + "FFFF"
+                + "00"
+                + "60"
+            ),
+        )
+        device._status_callback.assert_called_once_with(
+            100, 100, 96, MotionSpeedLevel.MEDIUM, device.end_position_info
+        )
+        assert device.end_position_info is not None
+        assert (
+            device.end_position_info.up
+            and device.end_position_info.down
+            and device.end_position_info.favorite
+        )
+
+        # Test STATUS notification without end positions
+        device.end_position_info = None
+        device._notification_callback(
+            None,
+            bytearray.fromhex(
+                MotionNotificationType.STATUS.value
+                + "02"
+                + "00"
+                + "00"
+                + "00"
+                + "00000000"
+                + "03"
+                + "00"
+                + "0000"
+                + "00"
+                + "0A"
+            ),
+        )
+        device._status_callback.assert_called_with(
+            0, 0, 10, MotionSpeedLevel.HIGH, device.end_position_info
+        )
+        assert device.end_position_info is not None
+        assert device._position_callback.call_count == 2
 
     async def test_send_command(self) -> None:
         """Test sending a command."""
