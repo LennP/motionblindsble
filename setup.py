@@ -1,4 +1,5 @@
-"""Python library for interfacing with MotionBlinds using Bluetooth Low Energy (BLE)."""
+"""Python library for interfacing with MotionBlinds BLE motors."""
+
 import pathlib
 
 from setuptools import find_packages, setup
@@ -9,7 +10,8 @@ README = (HERE / "README.md").read_text()
 setup(
     name="motionblindsble",
     version="{{VERSION_PLACEHOLDER}}",
-    description="Python library for interfacing with MotionBlinds using Bluetooth Low Energy (BLE).",
+    description="Python library for interfacing with MotionBlinds \
+                    using Bluetooth Low Energy (BLE).",
     long_description=README,
     long_description_content_type="text/markdown",
     url="https://github.com/LennP/PyPi-MotionBlinds_BLE",
@@ -18,7 +20,12 @@ setup(
     license="MIT",
     packages=find_packages(),
     python_requires=">=3.6",
-    install_requires=["bleak", "bleak-retry-connector", "pycryptodome", "pytz"],
+    install_requires=[
+        "bleak",
+        "bleak-retry-connector",
+        "pycryptodome",
+        "pytz",
+    ],
     tests_require=[],
     platforms=["any"],
     zip_safe=False,

@@ -1,4 +1,5 @@
 """Tests for the crypt.py module."""
+
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 

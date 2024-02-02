@@ -1,4 +1,5 @@
 """Encryption for MotionBlinds BLE."""
+
 from __future__ import annotations
 
 import datetime

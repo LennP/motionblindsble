@@ -1,4 +1,5 @@
 """Device for MotionBlinds BLE."""
+
 from __future__ import annotations
 
 from asyncio import (
@@ -229,14 +230,17 @@ class MotionDevice:
     _ha_call_later: Callable[[int, Coroutine], Callable] | None = None
 
     # Regular callbacks
-    _position_callback: Callable[
-        [int, int, MotionPositionInfo], None
-    ] | None = None
+    _position_callback: (
+        Callable[[int, int, MotionPositionInfo], None] | None
+    ) = None
     running_callback: Callable[[MotionRunningType], None] | None = None
     _connection_callback: Callable[[MotionConnectionType], None] | None = None
-    _status_callback: Callable[
-        [int, int, int, MotionSpeedLevel | None, MotionPositionInfo], None
-    ] | None = None
+    _status_callback: (
+        Callable[
+            [int, int, int, MotionSpeedLevel | None, MotionPositionInfo], None
+        ]
+        | None
+    ) = None
 
     def __init__(
         self,

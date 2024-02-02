@@ -1,4 +1,5 @@
 """Tests for the device.py module."""
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
