@@ -62,4 +62,4 @@ jobs:
 
       - name: Analyse the code with Flake8
         run: |
-          flake8 motionblindsble --count --exit-zero --max-line-length=130 --statistics
+          flake8 motionblindsble --count --exit-zero --statistics
