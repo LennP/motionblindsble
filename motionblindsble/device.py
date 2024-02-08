@@ -258,8 +258,8 @@ class MotionDevice:
             self._ble_device = ble_device
         else:
             _LOGGER.warning(
-                "(%s) Could not find BLEDevice, \
-                creating new BLEDevice from address",
+                "(%s) Could not find BLEDevice,"
+                " creating new BLEDevice from address",
                 device_address,
             )
             self._ble_device = BLEDevice(
@@ -316,15 +316,15 @@ class MotionDevice:
 
         async def _disconnect_later(_: datetime | None = None):
             _LOGGER.debug(
-                "(%s) Disconnecting after {%i}s", self.device_address, timeout
+                "(%s) Disconnecting after %is", self.device_address, timeout
             )
             await self.disconnect()
 
         self._disconnect_time = new_disconnect_time
         if self._ha_call_later:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to {%i} \
-                using Home Assistant",
+                "(%s) Refreshing disconnect timeout to %i"
+                " using Home Assistant",
                 self.device_address,
                 timeout,
             )
@@ -333,7 +333,7 @@ class MotionDevice:
             )  # type: ignore[call-arg]
         else:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to {%i}s",
+                "(%s) Refreshing disconnect timeout to %is",
                 self.device_address,
                 timeout,
             )
@@ -348,7 +348,7 @@ class MotionDevice:
         decrypted_message: str = MotionCrypt.decrypt(byte_array.hex())
         decrypted_message_bytes: bytes = byte_array.fromhex(decrypted_message)
         _LOGGER.debug(
-            "({%s}) Received message: {%s}",
+            "(%s) Received message: %s",
             self.device_address,
             decrypted_message,
         )
