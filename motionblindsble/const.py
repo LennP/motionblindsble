@@ -1,6 +1,6 @@
 """Constants for MotionBlinds BLE."""
 
-from enum import IntEnum, Enum
+from enum import Enum, IntEnum
 
 SETTING_MAX_CONNECT_ATTEMPTS = 5
 SETTING_MAX_COMMAND_ATTEMPTS = 5
@@ -8,10 +8,12 @@ SETTING_DISCONNECT_TIME = 15  # Seconds
 SETTING_CALIBRATION_DISCONNECT_TIME = 45  # Seconds
 SETTING_NOTIFICATION_DELAY = 0.5  # Seconds
 
-EXCEPTION_NO_END_POSITIONS = "{device_name}'s end positions need to be set \
-before usage of this command."
-EXCEPTION_NO_FAVORITE_POSITION = "{device_name}'s favorite position needs \
-to be set before usage of this command."
+EXCEPTION_NO_END_POSITIONS = "{device_name}'s end positions need to be set"
+" before usage of this command."
+EXCEPTION_NO_FAVORITE_POSITION = "{device_name}'s favorite position needs"
+" to be set before usage of this command."
+EXCEPTION_NOT_CALIBRATED = "{device_name} needs to be calibrated using the"
+" MotionBlinds BLE app before usage."
 
 
 class MotionService(Enum):
@@ -76,3 +78,24 @@ class MotionSpeedLevel(IntEnum):
     LOW = 1
     MEDIUM = 2
     HIGH = 3
+
+
+class MotionCalibrationType(Enum):
+    """Enum for the calibration type."""
+
+    CALIBRATED = "calibrated"
+    UNCALIBRATED = "uncalibrated"
+    CALIBRATING = "calibrating"
+
+
+class MotionBlindType(Enum):
+    """Enum for the blind type."""
+
+    ROLLER = "Roller blind"
+    HONEYCOMB = "Honeycomb blind"
+    ROMAN = "Roman blind"
+    VENETIAN = "Venetian blind"
+    VENETIAN_TILT_ONLY = "Venetian blind (tilt-only)"
+    DOUBLE_ROLLER = "Double Roller blind"
+    CURTAIN = "Curtain blind"
+    VERTICAL = "Vertical blind"
