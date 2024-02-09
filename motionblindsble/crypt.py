@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import datetime
 from datetime import tzinfo
+from zoneinfo import ZoneInfo
 
 from Crypto.Cipher import AES
 from Crypto.Cipher._mode_ecb import EcbMode
 from Crypto.Util.Padding import pad, unpad
-from pytz import timezone as parse_timezone
 
 
 class MotionCrypt:
@@ -22,7 +22,7 @@ class MotionCrypt:
     @staticmethod
     def set_timezone(timezone: str) -> None:
         """Set the timezone for encryption, such as 'Europe/Amsterdam'."""
-        MotionCrypt.timezone = parse_timezone(timezone)
+        MotionCrypt.timezone = ZoneInfo(timezone)
 
     @staticmethod
     def encrypt(plaintext_hex: str) -> str:

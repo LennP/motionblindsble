@@ -15,20 +15,22 @@ class TestCrypt:
 
         MotionCrypt.set_timezone("Europe/Amsterdam")
 
-        expectedEncrypted = "244e1d963ebdc5453f43e896465b5bcf"
-        expectedDecrypted = "070404020e0059b4"
+        expected_encrypted = "244e1d963ebdc5453f43e896465b5bcf"
+        expected_decrypted = "070404020e0059b4"
 
-        decrypted = MotionCrypt.decrypt(expectedEncrypted)
+        decrypted = MotionCrypt.decrypt(expected_encrypted)
         encrypted = MotionCrypt.encrypt(decrypted)
 
-        assert expectedDecrypted == decrypted
-        assert expectedEncrypted == encrypted
+        assert expected_decrypted == decrypted
+        assert expected_encrypted == encrypted
 
     @patch("motionblindsble.crypt.datetime")
     def test_get_time(self, mock_datetime: MagicMock) -> None:
         """Test getting the time string."""
 
         MotionCrypt.set_timezone("Europe/Amsterdam")
+
+        assert isinstance(MotionCrypt.get_time(), str)
 
         mock_datetime.datetime.now.return_value = datetime(
             year=2015,

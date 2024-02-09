@@ -19,12 +19,11 @@ setup(
     author_email="lennperik@hotmail.nl",
     license="MIT",
     packages=find_packages(),
-    python_requires=">=3.6",
+    python_requires=">=3.9",
     install_requires=[
         "bleak",
         "bleak-retry-connector",
         "pycryptodome",
-        "pytz",
     ],
     tests_require=[],
     platforms=["any"],
