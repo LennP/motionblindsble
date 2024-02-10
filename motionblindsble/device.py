@@ -89,10 +89,9 @@ def requires_connection(
             )
 
         return decorator
-    else:
-        return _requires_connection_decorator(
-            func, disable_callback=disable_callback
-        )
+    return _requires_connection_decorator(
+        func, disable_callback=disable_callback
+    )
 
 
 def requires_end_positions(
@@ -135,14 +134,13 @@ def requires_end_positions(
                             display_name=self.display_name
                         )
                     )
-                else:
-                    # If no end positions are set an exception is raised and motor not moved
-                    self.update_running(MotionRunningType.STILL)
-                    raise NoEndPositionsException(
-                        EXCEPTION_NO_END_POSITIONS.format(
-                            display_name=self.display_name
-                        )
+                # If no end positions are set an exception is raised and motor not moved
+                self.update_running(MotionRunningType.STILL)
+                raise NoEndPositionsException(
+                    EXCEPTION_NO_END_POSITIONS.format(
+                        display_name=self.display_name
                     )
+                )
             return await func(
                 self,
                 *args,
@@ -152,18 +150,16 @@ def requires_end_positions(
         return wrapper
 
     if func is None:
-        # If func is None, the decorator was called with arguments, return a decorator.
+
         def decorator(func):
             return _requires_end_positions_decorator(
                 func, can_calibrate_curtain=can_calibrate_curtain
             )
 
         return decorator
-    else:
-        # If func is not None, the decorator was used without arguments, apply it directly.
-        return _requires_end_positions_decorator(
-            func, can_calibrate_curtain=can_calibrate_curtain
-        )
+    return _requires_end_positions_decorator(
+        func, can_calibrate_curtain=can_calibrate_curtain
+    )
 
 
 def requires_favorite_position(func: Callable) -> Callable:
@@ -494,7 +490,10 @@ class MotionDevice:
                     end_position_info,
                 )
             _LOGGER.debug(
-                "(%s) Received feedback; position: %s, tilt: %s, top position set: %s, bottom position set: %s, favorite position set: %s",
+                (
+                    "(%s) Received feedback; position: %s, tilt: %s, "
+                    "top position set: %s, bottom position set: %s, favorite position set: %s"
+                ),
                 self.ble_device.address,
                 str(position),
                 str(tilt),
@@ -535,7 +534,10 @@ class MotionDevice:
                     end_position_info,
                 )
             _LOGGER.debug(
-                "(%s) Received status; position: %s, tilt: %s, battery: %s, speed: %s, top position set: %s, bottom position set: %s, favorite position set: %s",
+                (
+                    "(%s) Received status; position: %s, tilt: %s, battery: %s, speed: %s, "
+                    "top position set: %s, bottom position set: %s, favorite position set: %s"
+                ),
                 self.ble_device.address,
                 str(position),
                 str(tilt),
@@ -556,7 +558,7 @@ class MotionDevice:
         self._current_bleak_client = None
 
     async def connect(
-        self, disable_callbacks: list[MotionCallback] = []
+        self, disable_callbacks: list[MotionCallback] | None = None
     ) -> bool:
         """Connect to the device if not connected.
 
@@ -564,7 +566,9 @@ class MotionDevice:
         """
         if not self.is_connected():
             # Connect if not connected yet and not busy connecting
-            self._disable_connection_callbacks(disable_callbacks)
+            self._disable_connection_callbacks(
+                disable_callbacks if disable_callbacks is not None else []
+            )
             self._received_end_position_info_event.clear()
             return await self._connection_queue.wait_for_connection(self)
         self.refresh_disconnect_timer()
@@ -785,13 +789,13 @@ class MotionDevice:
         assert not angle < 0 and not angle > 180
         self.update_running(
             MotionRunningType.UNKNOWN
-            if self._angle is None
+            if self._tilt is None
             else (
                 MotionRunningType.STILL
-                if angle == self._angle
+                if angle == self._tilt
                 else (
                     MotionRunningType.OPENING
-                    if angle < self._angle
+                    if angle < self._tilt
                     else MotionRunningType.CLOSING
                 )
             )
@@ -910,7 +914,10 @@ class MotionDevice:
     ) -> None:
         """Update the end_position_info."""
         _LOGGER.debug(
-            "(%s) Updating end position info; top position set: %s, bottom position set: %s, favorite position set: %s",
+            (
+                "(%s) Updating end position info; top position set: %s, "
+                "bottom position set: %s, favorite position set: %s"
+            ),
             self.ble_device.address,
             end_position_info.up,
             end_position_info.down,
