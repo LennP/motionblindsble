@@ -927,11 +927,9 @@ class MotionDevice:
         )
         self._end_position_info = end_position_info
         self.update_calibration(
-            (
-                MotionCalibrationType.CALIBRATED
-                if self._end_position_info.up
-                else MotionCalibrationType.UNCALIBRATED
-            )
+            MotionCalibrationType.CALIBRATED
+            if self._end_position_info.up
+            else MotionCalibrationType.UNCALIBRATED
         )
         self._received_end_position_info_event.set()
         if self._is_connection_callback_disabled(
