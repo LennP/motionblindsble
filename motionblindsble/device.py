@@ -121,20 +121,20 @@ def requires_end_positions(
                         SETTING_CALIBRATION_DISCONNECT_TIME
                     )
                     self.update_calibration(MotionCalibrationType.CALIBRATING)
-                    # Continue with the command, which will start auto-calibration
+                    # Continue with the command, will start auto-calibration
             elif (
                 self._end_position_info is not None
                 and not self._end_position_info.up
             ):
                 self.refresh_disconnect_timer()
                 if self.blind_type is MotionBlindType.VERTICAL:
-                    # Vertical blinds need to be calibrated in the MotionBlinds BLE app
+                    # Vertical blinds require calibration in mobile app
                     raise NotCalibratedException(
                         EXCEPTION_NOT_CALIBRATED.format(
                             display_name=self.display_name
                         )
                     )
-                # If no end positions are set an exception is raised and motor not moved
+                # If no end positions are set an exception is raised
                 self.update_running(MotionRunningType.STILL)
                 raise NoEndPositionsException(
                     EXCEPTION_NO_END_POSITIONS.format(
@@ -172,7 +172,7 @@ def requires_favorite_position(func: Callable) -> Callable:
             and not self._end_position_info.favorite
         ):
             self.refresh_disconnect_timer()
-            # If no favorite position is set an exception is raised and motor not moved
+            # If no favorite position is set an exception is raised
             self.update_running(MotionRunningType.STILL)
             raise NoFavoritePositionException(
                 EXCEPTION_NO_FAVORITE_POSITION.format(
@@ -492,7 +492,8 @@ class MotionDevice:
             _LOGGER.debug(
                 (
                     "(%s) Received feedback; position: %s, tilt: %s, "
-                    "top position set: %s, bottom position set: %s, favorite position set: %s"
+                    "top position set: %s, bottom position set: %s, "
+                    "favorite position set: %s"
                 ),
                 self.ble_device.address,
                 str(position),
@@ -535,8 +536,9 @@ class MotionDevice:
                 )
             _LOGGER.debug(
                 (
-                    "(%s) Received status; position: %s, tilt: %s, battery: %s, speed: %s, "
-                    "top position set: %s, bottom position set: %s, favorite position set: %s"
+                    "(%s) Received status; position: %s, tilt: %s, "
+                    "speed: %s, top position set: %s, battery: %s, "
+                    "bottom position set: %s, favorite position set: %s"
                 ),
                 self.ble_device.address,
                 str(position),
