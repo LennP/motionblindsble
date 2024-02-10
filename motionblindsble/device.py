@@ -67,8 +67,6 @@ def requires_connection(
         func: Callable, disable_callback: MotionCallback | None
     ) -> Callable:
         async def wrapper(self: MotionDevice, *args, **kwargs):
-            _LOGGER.error("Inside requires: %s", disable_callback)
-            _LOGGER.error("Calling func: %s", func)
             if not await self.connect(
                 disable_callbacks=(
                     [disable_callback] if disable_callback is not None else []
@@ -827,7 +825,6 @@ class MotionDevice:
     def _disable_connection_callbacks(
         self, callbacks: list[MotionCallback]
     ) -> None:
-        _LOGGER.error(callbacks)
         self._disabled_connection_callbacks = callbacks
 
     def _is_connection_callback_disabled(
