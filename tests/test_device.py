@@ -224,8 +224,7 @@ class TestDeviceConnection:
 
         # Test establish normal connection
         await device.establish_connection()
-        device._current_bleak_client.set_disconnected_callback \
-            .assert_called_once()
+        device._current_bleak_client.set_disconnected_callback.assert_called_once()
         device.refresh_disconnect_timer: Mock
         device.refresh_disconnect_timer.assert_called()
         mock_set_connection.assert_has_calls(
@@ -599,7 +598,7 @@ class TestDevice:
         device.register_connection_callback(connection_callback)
         device._connection_callback()
         device._connection_callback.assert_called_once()
-        device.set_connection(MotionConnectionType.CONNECTED)
+        device.update_connection(MotionConnectionType.CONNECTED)
         assert device._connection_type is MotionConnectionType.CONNECTED
 
         status_callback = Mock()

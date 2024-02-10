@@ -7,13 +7,22 @@ SETTING_MAX_COMMAND_ATTEMPTS = 5
 SETTING_DISCONNECT_TIME = 15  # Seconds
 SETTING_CALIBRATION_DISCONNECT_TIME = 45  # Seconds
 SETTING_NOTIFICATION_DELAY = 0.5  # Seconds
+SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME = 2  # Seconds
 
-EXCEPTION_NO_END_POSITIONS = "{device_name}'s end positions need to be set"
-" before usage of this command."
-EXCEPTION_NO_FAVORITE_POSITION = "{device_name}'s favorite position needs"
-" to be set before usage of this command."
-EXCEPTION_NOT_CALIBRATED = "{device_name} needs to be calibrated using the"
-" MotionBlinds BLE app before usage."
+DISPLAY_NAME = "MotionBlind {mac_code}"
+
+EXCEPTION_NO_END_POSITIONS = (
+    "{display_name}'s end positions need to be set"
+    " before usage of this command."
+)
+EXCEPTION_NO_FAVORITE_POSITION = (
+    "{display_name}'s favorite position needs"
+    " to be set before usage of this command."
+)
+EXCEPTION_NOT_CALIBRATED = (
+    "{display_name} needs to be calibrated using the"
+    " MotionBlinds BLE app before usage."
+)
 
 
 class MotionService(Enum):
@@ -99,3 +108,18 @@ class MotionBlindType(Enum):
     DOUBLE_ROLLER = "Double Roller blind"
     CURTAIN = "Curtain blind"
     VERTICAL = "Vertical blind"
+
+
+class MotionCallback(Enum):
+    """Enum for the callbacks."""
+
+    STATUS = "status"
+    FEEDBACK = "feedback"
+    POSITION = "position"
+    BATTERY = "battery"
+    SPEED = "speed"
+    END_POSITION_INFO = "end_position_info"
+    RUNNING = "running"
+    CONNECTION = "connection"
+    CALIBRATION = "calibration"
+    SIGNAL_STRENGTH = "signal_strength"

@@ -1,4 +1,4 @@
-"""Python library for interfacing with MotionBlinds BLE motors."""
+"""Python library for interfacing with Motionblinds BLE motors."""
 
 import pathlib
 
@@ -10,11 +10,13 @@ README = (HERE / "README.md").read_text()
 setup(
     name="motionblindsble",
     version="{{VERSION_PLACEHOLDER}}",
-    description="Python library for interfacing with MotionBlinds"
-    " using Bluetooth Low Energy (BLE).",
+    description=(
+        "Python library for interfacing with Motionblinds"
+        " using Bluetooth Low Energy (BLE)."
+    ),
     long_description=README,
     long_description_content_type="text/markdown",
-    url="https://github.com/LennP/PyPi-MotionBlinds_BLE",
+    url="https://github.com/LennP/PyPi-Motionblinds_BLE",
     author="LennP",
     author_email="lennperik@hotmail.nl",
     license="MIT",
