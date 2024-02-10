@@ -66,9 +66,7 @@ def requires_connection(
     def _requires_connection_decorator(
         func: Callable, disable_callback: MotionCallback | None
     ) -> Callable:
-
         async def wrapper(self: MotionDevice, *args, **kwargs):
-
             _LOGGER.error("Inside requires: %s", disable_callback)
             _LOGGER.error("Calling func: %s", func)
             if not await self.connect(
@@ -102,7 +100,6 @@ def requires_end_positions(
     def _requires_end_positions_decorator(
         func: Callable, can_calibrate_curtain: bool
     ) -> Callable:
-
         async def wrapper(self: MotionDevice, *args, **kwargs):
             # pylint: disable=protected-access
             if self._end_position_info is None:
