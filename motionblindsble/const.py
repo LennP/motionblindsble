@@ -59,7 +59,7 @@ class MotionCommandType(Enum):
 class MotionNotificationType(Enum):
     """Enum for the notification type."""
 
-    POSITION = "07040402"
+    FEEDBACK = "07040402"
     STATUS = "12040f02"
 
 
