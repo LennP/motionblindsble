@@ -288,6 +288,7 @@ class MotionDevice:
     # States
     _calibration_type: MotionCalibrationType | None
     _connection_type: MotionConnectionType
+    _running_type: MotionRunningType | None = None
     _position: int | None
     _tilt: int | None
     _battery: int | None
@@ -340,7 +341,12 @@ class MotionDevice:
                 " creating new BLEDevice from address",
                 device,
             )
-            self.ble_device = BLEDevice(device, device, {}, rssi=None)
+            self.ble_device = BLEDevice(
+                device,
+                device,
+                {"path": device},
+                rssi=None,
+            )
 
         self.display_name = DISPLAY_NAME.format(
             mac_code=self.ble_device.address.replace(":", "")[-4:]
@@ -466,7 +472,7 @@ class MotionDevice:
             decrypted_message,
         )
 
-        if decrypted_message.startswith(MotionNotificationType.POSITION.value):
+        if decrypted_message.startswith(MotionNotificationType.FEEDBACK.value):
             position: int = decrypted_message_bytes[6]
             tilt: int = decrypted_message_bytes[7]
             end_position_info = (
@@ -550,6 +556,7 @@ class MotionDevice:
         _LOGGER.debug("(%s) Disconnected", self.ble_device.address)
         self.update_calibration(None)
         self.update_running(None)
+        self.update_position(None, None)
         self.update_speed(None)
         self.update_connection(MotionConnectionType.DISCONNECTED)
         self._current_bleak_client = None
@@ -614,7 +621,6 @@ class MotionDevice:
             MotionBlindType.CURTAIN,
             MotionBlindType.VERTICAL,
         ]:
-            _LOGGER.warning("Using notification delay")
             await sleep(SETTING_NOTIFICATION_DELAY)
 
         # Set the point (used after calibrating Curtain)
@@ -874,6 +880,7 @@ class MotionDevice:
             self.ble_device.address,
             (running_type.value if running_type is not None else None),
         )
+        self._running_type = running_type
         if self._is_connection_callback_disabled(MotionCallback.RUNNING):
             return
         for running_callback in self._running_callbacks:
@@ -921,9 +928,13 @@ class MotionDevice:
         )
         self._end_position_info = end_position_info
         self.update_calibration(
-            MotionCalibrationType.CALIBRATED
-            if self._end_position_info.up
-            else MotionCalibrationType.UNCALIBRATED
+            None
+            if end_position_info is None
+            else (
+                MotionCalibrationType.CALIBRATED
+                if self._end_position_info.up
+                else MotionCalibrationType.UNCALIBRATED
+            )
         )
         self._received_end_position_info_event.set()
         if self._is_connection_callback_disabled(
@@ -981,7 +992,7 @@ class MotionDevice:
         self._feedback_callbacks.append(callback)
 
     def register_position_callback(
-        self, callback: Callable[[int, int], None]
+        self, callback: Callable[[int | None, int | None], None]
     ) -> None:
         """Register the callback used to update the position and tilt."""
         self._position_callbacks.append(callback)
