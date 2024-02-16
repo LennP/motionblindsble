@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 from asyncio import (
-    Event,
     FIRST_COMPLETED,
+    Event,
     Future,
     Task,
     TimerHandle,
@@ -36,11 +36,11 @@ from .const import (
     EXCEPTION_NO_FAVORITE_POSITION,
     EXCEPTION_NOT_CALIBRATED,
     SETTING_CALIBRATION_DISCONNECT_TIME,
+    SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_MAX_CONNECT_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
-    SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME,
     MotionBlindType,
     MotionCalibrationType,
     MotionCallback,
