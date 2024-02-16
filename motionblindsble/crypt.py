@@ -14,32 +14,32 @@ from Crypto.Util.Padding import pad, unpad
 class MotionCrypt:
     """Used for the encryption & decryption of bluetooth messages."""
 
-    timezone: tzinfo | None = None
+    _timezone: tzinfo | None = None
 
-    encryption_key: bytes = b"a3q8r8c135sqbn66"
-    cipher: EcbMode = AES.new(encryption_key, AES.MODE_ECB)
+    _encryption_key: bytes = b"a3q8r8c135sqbn66"
+    _cipher: EcbMode = AES.new(_encryption_key, AES.MODE_ECB)
 
     @staticmethod
     def set_timezone(timezone: str) -> None:
         """Set the timezone for encryption, such as 'Europe/Amsterdam'."""
-        MotionCrypt.timezone = ZoneInfo(timezone)
+        MotionCrypt._timezone = ZoneInfo(timezone)
 
     @staticmethod
     def encrypt(plaintext_hex: str) -> str:
         """Encrypt a hex string."""
         plaintext_bytes = bytes.fromhex(plaintext_hex)
-        cipheredtext_bytes = MotionCrypt.cipher.encrypt(
+        ciphertext_bytes = MotionCrypt._cipher.encrypt(
             pad(plaintext_bytes, AES.block_size)
         )
-        cipheredtext_hex = cipheredtext_bytes.hex()
-        return cipheredtext_hex
+        ciphertext_hex = ciphertext_bytes.hex()
+        return ciphertext_hex
 
     @staticmethod
     def decrypt(cipheredtext_hex: str) -> str:
         """Decrypt a hex string."""
-        cipheredtext_bytes = bytes.fromhex(cipheredtext_hex)
+        ciphertext_bytes = bytes.fromhex(cipheredtext_hex)
         plaintext_bytes = unpad(
-            MotionCrypt.cipher.decrypt(cipheredtext_bytes), AES.block_size
+            MotionCrypt._cipher.decrypt(ciphertext_bytes), AES.block_size
         )
         plaintext_hex = plaintext_bytes.hex()
         return plaintext_hex
@@ -54,11 +54,11 @@ class MotionCrypt:
     @staticmethod
     def get_time() -> str:
         """Get the current time string."""
-        if not MotionCrypt.timezone:
+        if not MotionCrypt._timezone:
             raise TimezoneNotSetException(
                 "Motion encryption requires a valid timezone."
             )
-        now = datetime.datetime.now(MotionCrypt.timezone)
+        now = datetime.datetime.now(MotionCrypt._timezone)
 
         year = now.year % 100
         month = now.month
