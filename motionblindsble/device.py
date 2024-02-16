@@ -641,9 +641,7 @@ class MotionDevice:
             and self._current_bleak_client.is_connected
         )
 
-    async def _send_command(
-        self, command_prefix: str, connection_command: bool = False
-    ) -> bool:
+    async def _send_command(self, command_prefix: str) -> bool:
         """Write a message to the command characteristic.
 
         Return whether the command was successfully executed.
@@ -690,33 +688,25 @@ class MotionDevice:
     async def user_query(self) -> bool:
         """Send user_query command."""
         command_prefix = str(MotionCommandType.USER_QUERY.value)
-        return await self._send_command(
-            command_prefix, connection_command=True
-        )
+        return await self._send_command(command_prefix)
 
     @requires_connection
     async def set_key(self) -> bool:
         """Send set_key command."""
         command_prefix = str(MotionCommandType.SET_KEY.value)
-        return await self._send_command(
-            command_prefix, connection_command=True
-        )
+        return await self._send_command(command_prefix)
 
     @requires_connection
     async def status_query(self) -> bool:
         """Send status_query command."""
         command_prefix = str(MotionCommandType.STATUS_QUERY.value)
-        return await self._send_command(
-            command_prefix, connection_command=True
-        )
+        return await self._send_command(command_prefix)
 
     @requires_connection
     async def point_set_query(self) -> bool:
         """Send point_set_query command."""
         command_prefix = str(MotionCommandType.POINT_SET_QUERY.value)
-        return await self._send_command(
-            command_prefix, connection_command=True
-        )
+        return await self._send_command(command_prefix)
 
     @requires_connection(disable_callback=MotionCallback.SPEED)
     async def speed(self, speed_level: MotionSpeedLevel) -> bool:
