@@ -9,7 +9,7 @@ SETTING_CALIBRATION_DISCONNECT_TIME = 45  # Seconds
 SETTING_NOTIFICATION_DELAY = 0.5  # Seconds
 SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME = 2  # Seconds
 
-DISPLAY_NAME = "MotionBlind {mac_code}"
+DISPLAY_NAME = "Motionblind {mac_code}"
 
 EXCEPTION_NO_END_POSITIONS = (
     "{display_name}'s end positions need to be set"
