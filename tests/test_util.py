@@ -7,8 +7,10 @@ from motionblindsble.util import discover
 
 
 class TestUtil:
+    """Test util functions in util.py."""
 
     async def test_discover_motionblinds(self):
+        """Test the discover motionblinds function."""
         # Mock BLE devices and advertisement data
         mock_devices_advertisements = {
             "00:11:22:33:44:55": (
@@ -33,7 +35,7 @@ class TestUtil:
 
             discovered = await discover()
 
-            # Verify that only devices with names matching 'MOTION_****' are returned
+            # Verify only devices with name matching 'MOTION_****' returned
             expected_devices = [
                 mock_devices_advertisements["00:11:22:33:44:55"],
                 mock_devices_advertisements["22:33:44:55:66:77"],

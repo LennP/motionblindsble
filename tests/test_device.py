@@ -285,8 +285,7 @@ class TestDeviceConnection:
         # Test establish normal connection
         await device.establish_connection()
         device._current_bleak_client.set_disconnected_callback.assert_called_once()
-        device.refresh_disconnect_timer: Mock
-        device.refresh_disconnect_timer.assert_called()
+        device.refresh_disconnect_timer.assert_called()  # pylint: disable=no-member
         mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.CONNECTING),
@@ -670,7 +669,7 @@ class TestDevice:
             else:
                 assert await test_command()
             call_counter += 1
-            device._send_command: Mock
+            # pylint: disable=no-member
             assert device._send_command.call_count == call_counter
 
     async def test_register_callbacks(self) -> None:
@@ -758,12 +757,12 @@ class TestDevice:
 
         callback = Mock()
 
-        for input in inputs:
-            register_callback = input[0]
-            disable_callback = input[1]
-            update = input[2]
-            args = input[3]
-            attribute_names = input[4]
+        for inp in inputs:
+            register_callback = inp[0]
+            disable_callback = inp[1]
+            update = inp[2]
+            args = inp[3]
+            attribute_names = inp[4]
 
             callback.reset_mock()
             register_callback(callback)
