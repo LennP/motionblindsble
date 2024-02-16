@@ -1,6 +1,7 @@
 """Tests for the device.py module."""
 
 import asyncio
+import fnmatch
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
@@ -8,6 +9,7 @@ from motionblindsble.device import (
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
+    SETTING_CALIBRATION_DISCONNECT_TIME,
     BleakError,
     BleakNotFoundError,
     BleakOutOfConnectionSlotsError,
@@ -16,10 +18,15 @@ from motionblindsble.device import (
     MotionConnectionType,
     MotionDevice,
     MotionNotificationType,
+    MotionRunningType,
+    MotionCalibrationType,
+    MotionCallback,
     MotionPositionInfo,
+    MotionBlindType,
     MotionSpeedLevel,
     NoEndPositionsException,
     NoFavoritePositionException,
+    NotCalibratedException,
     requires_connection,
     requires_end_positions,
     requires_favorite_position,
@@ -29,30 +36,79 @@ from motionblindsble.device import (
 class TestDeviceDecorators:
     """Test the decorators in device.py module."""
 
-    @patch(
-        "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
-        Mock(),
-    )
-    async def test_requires_end_positions(self) -> None:
+    @patch("motionblindsble.device.MotionDevice.refresh_disconnect_timer")
+    @patch("motionblindsble.device.MotionDevice.update_calibration")
+    async def test_requires_end_positions(
+        self,
+        mock_update_calibration,
+        mock_refresh_disconnect_timer,
+    ) -> None:
         """Test the @requires_end_positions decorator."""
         device = MotionDevice("00:11:22:33:44:55")
-        device.end_position_info = MotionPositionInfo(
-            0xFF, 0xFFFF
-        )  # Simulating end positions being set
         device.register_running_callback(lambda _: None)
 
         @requires_end_positions
-        async def mock_method(self, ignore_end_positions_not_set=False):
+        async def mock_method(self):
             return True
 
+        @requires_end_positions(can_calibrate_curtain=True)
+        async def mock_method_calibration(self):
+            return True
+
+        with patch.object(
+            device, "_received_end_position_info_event"
+        ) as end_position_event_mock:
+
+            def set_end_positions():
+                # Set end positions after Event.wait() is called
+                device.update_end_position_info(
+                    MotionPositionInfo(
+                        0xFF, 0xFFFF
+                    )  # Simulating end positions being set
+                )
+
+            end_position_event_mock.wait = AsyncMock(
+                side_effect=set_end_positions
+            )
+
+            result = await mock_method(device)
+            assert result
+
+        device._end_position_info.update_end_positions(
+            0x00
+        )  # Simulating end positions not being
+        device._calibration_type = MotionCalibrationType.UNCALIBRATED
+
+        for blind_type in [
+            MotionBlindType.ROLLER,
+            MotionBlindType.DOUBLE_ROLLER,
+            MotionBlindType.HONEYCOMB,
+            MotionBlindType.ROMAN,
+            MotionBlindType.VENETIAN,
+            MotionBlindType.VENETIAN_TILT_ONLY,
+        ]:
+            device.blind_type = blind_type
+            with pytest.raises(NoEndPositionsException):
+                result = await mock_method(device)
+
+        device.blind_type = MotionBlindType.VERTICAL
+        with pytest.raises(NotCalibratedException):
+            result = await mock_method(device)
+
+        device.blind_type = MotionBlindType.CURTAIN
+        mock_refresh_disconnect_timer.reset_mock()
+        mock_update_calibration.reset_mock()
         result = await mock_method(device)
         assert result
 
-        device.end_position_info.update_end_positions(
-            0x00
-        )  # # Simulating end positions not being
-        with pytest.raises(NoEndPositionsException):
-            result = await mock_method(device)
+        result = await mock_method_calibration(device)
+        assert result
+        mock_update_calibration.assert_called_once_with(
+            MotionCalibrationType.CALIBRATING
+        )
+        mock_refresh_disconnect_timer.assert_called_once_with(
+            SETTING_CALIBRATION_DISCONNECT_TIME
+        )
 
     @patch(
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
@@ -61,21 +117,25 @@ class TestDeviceDecorators:
     async def test_requires_favorite_position(self) -> None:
         """Test the @requires_favorite_position decorator."""
         device = MotionDevice("00:11:22:33:44:55")
-        device.end_position_info = MotionPositionInfo(
-            0xFF, 0xFFFF
-        )  # Simulating end positions being set
+        device.update_end_position_info(
+            MotionPositionInfo(
+                0xFF, 0xFFFF
+            )  # Simulating end positions being set
+        )
         device.register_running_callback(lambda _: None)
 
         @requires_favorite_position
-        async def mock_method(self, ignore_end_positions_not_set=False):
+        async def mock_method(self):
             return True
 
         result = await mock_method(device)
         assert result
 
-        device.end_position_info = MotionPositionInfo(
-            0x00, 0x0000
-        )  # Simulating end positions being set
+        device.update_end_position_info(
+            MotionPositionInfo(
+                0x00, 0x0000
+            )  # Simulating end positions not being set
+        )
         with pytest.raises(NoFavoritePositionException):
             await mock_method(device)
 
@@ -85,7 +145,7 @@ class TestDeviceDecorators:
         device = MotionDevice("00:11:22:33:44:55")
 
         @requires_connection
-        async def mock_method(self, ignore_end_positions_not_set=False):
+        async def mock_method(self):
             return True
 
         mock_connect.return_value = True
@@ -177,7 +237,7 @@ class TestDeviceConnection:
                 )
             assert not can_execute_command
             assert connection_queue._connection_task is None
-            assert device._connection_type is MotionConnectionType.DISCONNECTED
+            assert device.connection_type is MotionConnectionType.DISCONNECTED
 
     async def test_cancel(self) -> None:
         """Test cancelling a connection task."""
@@ -215,9 +275,9 @@ class TestDeviceConnection:
         AsyncMock(return_value=AsyncMock()),
     )
     @patch("motionblindsble.device.sleep")
-    @patch("motionblindsble.device.MotionDevice.set_connection")
+    @patch("motionblindsble.device.MotionDevice.update_connection")
     async def test_establish_connection(
-        self, mock_set_connection, mock_sleep
+        self, mock_update_connection, mock_sleep
     ) -> None:
         """Test the establish_connection function."""
         device = MotionDevice("00:11:22:33:44:55")
@@ -227,7 +287,7 @@ class TestDeviceConnection:
         device._current_bleak_client.set_disconnected_callback.assert_called_once()
         device.refresh_disconnect_timer: Mock
         device.refresh_disconnect_timer.assert_called()
-        mock_set_connection.assert_has_calls(
+        mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.CONNECTING),
                 call(MotionConnectionType.CONNECTED),
@@ -240,8 +300,24 @@ class TestDeviceConnection:
         device._connection_type = None
 
         # Test establish connection with notification delay
-        await device.establish_connection(use_notification_delay=True)
-        mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
+        for blind_type in [MotionBlindType.CURTAIN, MotionBlindType.VERTICAL]:
+            mock_sleep.reset_mock()
+            device.blind_type = blind_type
+            await device.establish_connection()
+            mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
+
+        for blind_type in [
+            MotionBlindType.ROLLER,
+            MotionBlindType.DOUBLE_ROLLER,
+            MotionBlindType.HONEYCOMB,
+            MotionBlindType.ROMAN,
+            MotionBlindType.VENETIAN,
+            MotionBlindType.VENETIAN_TILT_ONLY,
+        ]:
+            mock_sleep.reset_mock()
+            device.blind_type = blind_type
+            await device.establish_connection()
+            assert mock_sleep.call_count == 0
 
     @patch("motionblindsble.device.MotionDevice.is_connected")
     @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")
@@ -273,8 +349,8 @@ class TestDeviceConnection:
         assert mock_refresh_disconnect_timer.call_count == 1
         assert mock_wait_for_connection.call_count == 2
 
-    @patch("motionblindsble.device.MotionDevice.set_connection")
-    async def test_disconnect(self, mock_set_connection) -> None:
+    @patch("motionblindsble.device.MotionDevice.update_connection")
+    async def test_disconnect(self, mock_update_connection) -> None:
         """Test the disconnect function."""
         device = MotionDevice("00:11:22:33:44:55")
 
@@ -291,7 +367,7 @@ class TestDeviceConnection:
             side_effect_disconnect
         )
         await device.disconnect()
-        mock_set_connection.assert_has_calls(
+        mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.DISCONNECTING),
                 call(MotionConnectionType.DISCONNECTED),
@@ -366,10 +442,12 @@ class TestDevice:
         ble_device2 = BLEDevice(
             "00:11:22:33:44:55", "00:11:22:33:44:55", {}, rssi=0
         )
-        MotionDevice("00:11:22:33:44:55")
-        device = MotionDevice("00:11:22:33:44:55", ble_device1)
+        device = MotionDevice(ble_device1)
         device.set_ble_device(ble_device2)
-        assert device._ble_device == ble_device2
+        assert device.ble_device == ble_device2
+
+        device2 = MotionDevice(ble_device2.address)
+        assert device2.ble_device.address == ble_device2.address
 
     def test_setters(self) -> None:
         """Test initializing a MotionDevice."""
@@ -385,52 +463,57 @@ class TestDevice:
     async def test_notification_callback(self) -> None:
         """Test the notification callback."""
         device = MotionDevice("00:11:22:33:44:55")
-        device._position_callback = Mock()
-        device._status_callback = Mock()
+        device.register_feedback_callback(Mock())
+        device.register_status_callback(Mock())
 
-        # Test POSITION notification with end positions
+        # Test FEEDBACK notification with end positions
         device._notification_callback(
             None,
             bytearray.fromhex(
-                MotionNotificationType.POSITION.value
+                MotionNotificationType.FEEDBACK.value
                 + "02"
                 + "00"
                 + "64"
                 + "B4"
             ),
         )
-        device._position_callback.assert_called_once_with(
-            100, 100, device.end_position_info
-        )
+        for feedback_callback in device._feedback_callbacks:
+            feedback_callback.assert_called_once_with(
+                100, 180, device._end_position_info
+            )
         assert (
-            not device.end_position_info.up
-            and not device.end_position_info.down
-            and device.end_position_info.favorite is None
+            not device._end_position_info.up
+            and not device._end_position_info.down
+            and device._end_position_info.favorite is None
         )
 
-        # Test POSITION notification without end positions
+        # Test FEEDBACK notification without end positions
+        for feedback_callback in device._feedback_callbacks:
+            feedback_callback.reset_mock()
         device._notification_callback(
             None,
             bytearray.fromhex(
-                MotionNotificationType.POSITION.value
+                MotionNotificationType.FEEDBACK.value
                 + "0c"
                 + "00"
                 + "00"
                 + "00"
             ),
         )
-        device._position_callback.assert_called_with(
-            0, 0, device.end_position_info
-        )
-        assert device._position_callback.call_count == 2
+        for feedback_callback in device._feedback_callbacks:
+            feedback_callback.assert_called_with(
+                0, 0, device._end_position_info
+            )
         assert (
-            device.end_position_info.up
-            and device.end_position_info.down
-            and device.end_position_info.favorite is None
+            device._end_position_info.up
+            and device._end_position_info.down
+            and device._end_position_info.favorite is None
         )
 
         # Test STATUS notification with end positions
-        device.end_position_info = None
+        for status_callback in device._status_callbacks:
+            status_callback.reset_mock()
+        device._end_position_info = None
         device._notification_callback(
             None,
             bytearray.fromhex(
@@ -447,18 +530,25 @@ class TestDevice:
                 + "60"
             ),
         )
-        device._status_callback.assert_called_once_with(
-            100, 100, 96, MotionSpeedLevel.MEDIUM, device.end_position_info
-        )
-        assert device.end_position_info is not None
+        for status_callback in device._status_callbacks:
+            status_callback.assert_called_once_with(
+                100,
+                180,
+                96,
+                MotionSpeedLevel.MEDIUM,
+                device._end_position_info,
+            )
+        assert device._end_position_info is not None
         assert (
-            device.end_position_info.up
-            and device.end_position_info.down
-            and device.end_position_info.favorite
+            device._end_position_info.up
+            and device._end_position_info.down
+            and device._end_position_info.favorite
         )
 
         # Test STATUS notification without end positions
-        device.end_position_info = None
+        for status_callback in device._status_callbacks:
+            status_callback.reset_mock()
+        device._end_position_info = None
         device._notification_callback(
             None,
             bytearray.fromhex(
@@ -475,13 +565,15 @@ class TestDevice:
                 + "0A"
             ),
         )
-        device._status_callback.assert_called_with(
-            0, 0, 10, MotionSpeedLevel.HIGH, device.end_position_info
-        )
-        assert device.end_position_info is not None
-        assert device._position_callback.call_count == 2
+        for status_callback in device._status_callbacks:
+            status_callback.assert_called_with(
+                0, 0, 10, MotionSpeedLevel.HIGH, device._end_position_info
+            )
+        assert device._end_position_info is not None
 
         # Test with invalid arguments
+        for status_callback in device._status_callbacks:
+            status_callback.reset_mock()
         device._notification_callback(
             None,
             bytearray.fromhex(
@@ -498,9 +590,10 @@ class TestDevice:
                 + "0A"
             ),
         )
-        device._status_callback.assert_called_with(
-            0, 0, 10, None, device.end_position_info
-        )
+        for status_callback in device._status_callbacks:
+            status_callback.assert_called_with(
+                0, 0, 10, None, device._end_position_info
+            )
 
     @patch("motionblindsble.device.MotionCrypt.encrypt", return_value="AA")
     @patch("motionblindsble.device.MotionCrypt.decrypt", return_value="AA")
@@ -553,7 +646,7 @@ class TestDevice:
     async def test_commands(self) -> None:
         """Test sending different commands."""
         device = MotionDevice("00:11:22:33:44:55")
-        device.end_position_info = MotionPositionInfo(0xFF, 0xFFFF)
+        device.update_end_position_info(MotionPositionInfo(0xFF, 0xFFFF))
 
         call_counter = 0
         test_commands = [
@@ -562,12 +655,12 @@ class TestDevice:
             device.status_query,
             device.point_set_query,
             (device.speed, [MotionSpeedLevel.MEDIUM]),
-            (device.percentage, [10]),
+            (device.position, [10]),
             device.open,
             device.close,
             device.stop,
             device.favorite,
-            (device.percentage_tilt, [10]),
+            (device.tilt, [10]),
             device.open_tilt,
             device.close_tilt,
         ]
@@ -580,28 +673,109 @@ class TestDevice:
             device._send_command: Mock
             assert device._send_command.call_count == call_counter
 
-    async def test_callbacks(self) -> None:
-        """Test the device callbacks."""
+    async def test_register_callbacks(self) -> None:
+        """Test registering device callbacks."""
         device = MotionDevice("00:11:22:33:44:55")
 
-        position_callback = Mock()
-        device.register_position_callback(position_callback)
-        device._position_callback()
-        device._position_callback.assert_called_once()
+        register_callbacks = []
+        for attr_name in dir(device):
+            if fnmatch.fnmatch(attr_name, "register_*_callback"):
+                method = getattr(device, attr_name)
+                if callable(method):
+                    register_callbacks.append(method)
 
-        running_callback = Mock()
-        device.register_running_callback(running_callback)
-        device.running_callback()
-        device.running_callback.assert_called_once()
+        for register_callback in register_callbacks:
+            callback = Mock()
+            register_callback(callback)
+            callback()
+            callback.assert_called_once()
 
-        connection_callback = Mock()
-        device.register_connection_callback(connection_callback)
-        device._connection_callback()
-        device._connection_callback.assert_called_once()
-        device.update_connection(MotionConnectionType.CONNECTED)
-        assert device._connection_type is MotionConnectionType.CONNECTED
+    @patch("motionblindsble.device.time_ns", Mock(return_value=0))
+    async def test_disabled_connection_callbacks(self) -> None:
+        """Test the device callbacks that are disabled on connection."""
 
-        status_callback = Mock()
-        device.register_status_callback(status_callback)
-        device._status_callback()
-        device._status_callback.assert_called_once()
+        device = MotionDevice("00:11:22:33:44:55")
+        device._connect_status_query_time = 0
+
+        inputs = [
+            (
+                device.register_end_position_callback,
+                MotionCallback.END_POSITION_INFO,
+                device.update_end_position_info,
+                [MotionPositionInfo(0xFF, 0xFFFF)],
+                ["_end_position_info"],
+            ),
+            (
+                device.register_connection_callback,
+                MotionCallback.CONNECTION,
+                device.update_connection,
+                [MotionConnectionType.CONNECTED],
+                ["_connection_type"],
+            ),
+            (
+                device.register_calibration_callback,
+                MotionCallback.CALIBRATION,
+                device.update_calibration,
+                [MotionCalibrationType.CALIBRATED],
+                ["_calibration_type"],
+            ),
+            (
+                device.register_running_callback,
+                MotionCallback.RUNNING,
+                device.update_running,
+                [MotionRunningType.OPENING],
+                ["_running_type"],
+            ),
+            (
+                device.register_battery_callback,
+                MotionCallback.BATTERY,
+                device.update_battery,
+                [5],
+                ["_battery"],
+            ),
+            (
+                device.register_speed_callback,
+                MotionCallback.SPEED,
+                device.update_speed,
+                [MotionSpeedLevel.HIGH],
+                ["_speed"],
+            ),
+            (
+                device.register_position_callback,
+                MotionCallback.POSITION,
+                device.update_position,
+                [5, 5],
+                ["_position", "_tilt"],
+            ),
+            (
+                device.register_signal_strength_callback,
+                MotionCallback.SIGNAL_STRENGTH,
+                device.update_signal_strength,
+                [-15],
+                ["rssi"],
+            ),
+        ]
+
+        callback = Mock()
+
+        for input in inputs:
+            register_callback = input[0]
+            disable_callback = input[1]
+            update = input[2]
+            args = input[3]
+            attribute_names = input[4]
+
+            callback.reset_mock()
+            register_callback(callback)
+            update(*args)
+            if len(args) == len(attribute_names):
+                for arg, attribute_name in zip(args, attribute_names):
+                    assert (
+                        getattr(device, attribute_name, "Attribute not found")
+                        == arg
+                    )
+
+            device._disabled_connection_callbacks = [disable_callback]
+            update(*args)
+
+            callback.assert_called_once_with(*args)

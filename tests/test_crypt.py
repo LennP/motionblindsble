@@ -48,7 +48,7 @@ class TestCrypt:
     def test_get_time_timezone_not_set(self) -> None:
         """Test getting the time string when the timezone is not set."""
 
-        MotionCrypt.timezone = None
+        MotionCrypt._timezone = None
 
         with pytest.raises(TimezoneNotSetException):
             print(MotionCrypt.get_time())
