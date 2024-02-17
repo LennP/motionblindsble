@@ -1,8 +1,10 @@
 """Tests for the device.py module."""
 
 import asyncio
+from asyncio import Event
 import fnmatch
 from unittest.mock import AsyncMock, Mock, call, patch
+from typing import Callable
 
 import pytest
 from motionblindsble.device import (
@@ -285,7 +287,8 @@ class TestDeviceConnection:
         # Test establish normal connection
         await device.establish_connection()
         device._current_bleak_client.set_disconnected_callback.assert_called_once()
-        device.refresh_disconnect_timer.assert_called()  # pylint: disable=no-member
+        # pylint: disable=no-member
+        device.refresh_disconnect_timer.assert_called()
         mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.CONNECTING),
@@ -340,13 +343,21 @@ class TestDeviceConnection:
         mock_wait_for_connection.return_value = False
         assert not await device.connect()
 
+        # Test exception in connection which should update connection
+        # and then raise the exception again
+        mock_is_connected.return_value = False
+        mock_wait_for_connection.side_effect = Exception()
+        with pytest.raises(Exception):
+            assert await device.connect()
+            assert device._connection_type == MotionConnectionType.DISCONNECTED
+
         # Test connect when connected
         mock_is_connected.return_value = True
         mock_wait_for_connection.return_value = True
         assert await device.connect()
 
         assert mock_refresh_disconnect_timer.call_count == 1
-        assert mock_wait_for_connection.call_count == 2
+        assert mock_wait_for_connection.call_count == 3
 
     @patch("motionblindsble.device.MotionDevice.update_connection")
     async def test_disconnect(self, mock_update_connection) -> None:
@@ -412,8 +423,15 @@ class TestDeviceConnection:
         device.refresh_disconnect_timer(force=True)
         assert device._disconnect_time == SETTING_DISCONNECT_TIME * 1e3
 
+        # Test custom disconnect time
+        device._disconnect_time = 0
+        device.set_custom_disconnect_time(9999)
+        device.refresh_disconnect_timer()
+        assert device._disconnect_time == 9999000
+
         # Test with _ha_call_later and _disconnect_later:
         def call_later(delay: int, action):
+            # Run immediately instead of after delay
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 loop.create_task(action())
@@ -428,6 +446,43 @@ class TestDeviceConnection:
             0
         )  # Wait for _disconnect_later to finish in event loop
         mock_disconnect.assert_called_once()
+
+        # Test permanent connection, no disconnect timer
+        mock_time_ns.reset_mock()
+        device.set_permanent_connection(True)
+        device.refresh_disconnect_timer()
+        assert mock_time_ns.call_count == 0
+
+        # Test permanent connection, disconnect timer cancels
+        permanent_connection_enabled = Event()
+
+        async def call_once_condition_is_met(action: Callable) -> None:
+            print("Waiting for condition")
+            await permanent_connection_enabled.wait()
+            await action()
+
+        def call_later_condition(delay: int, action: Callable) -> None:
+            # Run immediately instead of after delay
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(call_once_condition_is_met(action))
+            else:
+                asyncio.run(call_once_condition_is_met(action))
+
+        mock_disconnect.reset_mock()
+        device._ha_call_later = Mock(side_effect=call_later_condition)
+        # First set it to False and pass first line of refresh_disconnect_timer
+        # and make sure that a _disconnect_later is created
+        device.set_permanent_connection(False)
+        device.refresh_disconnect_timer()
+        # Set _permanent_connection to True and after that
+        # _disconnect_later can be called
+        device.set_permanent_connection(True)
+        await asyncio.sleep(
+            0
+        )  # Wait for _disconnect_later to finish in event loop
+        permanent_connection_enabled.set()
+        assert mock_disconnect.call_count == 0
 
 
 class TestDevice:
@@ -698,7 +753,44 @@ class TestDevice:
 
         inputs = [
             (
+                device.register_status_callback,
+                device.remove_status_callback,
+                MotionCallback.STATUS,
+                device.update_status,
+                [
+                    5,
+                    5,
+                    10,
+                    MotionSpeedLevel.HIGH,
+                    MotionPositionInfo(0xFF, 0xFFFF),
+                ],
+                [
+                    "_position",
+                    "_tilt",
+                    "_battery",
+                    "_speed",
+                    "_end_position_info",
+                ],
+            ),
+            (
+                device.register_feedback_callback,
+                device.remove_feedback_callback,
+                MotionCallback.FEEDBACK,
+                device.update_feedback,
+                [
+                    5,
+                    5,
+                    MotionPositionInfo(0xFF, 0xFFFF),
+                ],
+                [
+                    "_position",
+                    "_tilt",
+                    "_end_position_info",
+                ],
+            ),
+            (
                 device.register_end_position_callback,
+                device.remove_end_position_callback,
                 MotionCallback.END_POSITION_INFO,
                 device.update_end_position_info,
                 [MotionPositionInfo(0xFF, 0xFFFF)],
@@ -706,6 +798,7 @@ class TestDevice:
             ),
             (
                 device.register_connection_callback,
+                device.remove_connection_callback,
                 MotionCallback.CONNECTION,
                 device.update_connection,
                 [MotionConnectionType.CONNECTED],
@@ -713,6 +806,7 @@ class TestDevice:
             ),
             (
                 device.register_calibration_callback,
+                device.remove_calibration_callback,
                 MotionCallback.CALIBRATION,
                 device.update_calibration,
                 [MotionCalibrationType.CALIBRATED],
@@ -720,6 +814,7 @@ class TestDevice:
             ),
             (
                 device.register_running_callback,
+                device.remove_running_callback,
                 MotionCallback.RUNNING,
                 device.update_running,
                 [MotionRunningType.OPENING],
@@ -727,6 +822,7 @@ class TestDevice:
             ),
             (
                 device.register_battery_callback,
+                device.remove_battery_callback,
                 MotionCallback.BATTERY,
                 device.update_battery,
                 [5],
@@ -734,6 +830,7 @@ class TestDevice:
             ),
             (
                 device.register_speed_callback,
+                device.remove_speed_callback,
                 MotionCallback.SPEED,
                 device.update_speed,
                 [MotionSpeedLevel.HIGH],
@@ -741,6 +838,7 @@ class TestDevice:
             ),
             (
                 device.register_position_callback,
+                device.remove_position_callback,
                 MotionCallback.POSITION,
                 device.update_position,
                 [5, 5],
@@ -748,6 +846,7 @@ class TestDevice:
             ),
             (
                 device.register_signal_strength_callback,
+                device.remove_signal_strength_callback,
                 MotionCallback.SIGNAL_STRENGTH,
                 device.update_signal_strength,
                 [-15],
@@ -759,10 +858,11 @@ class TestDevice:
 
         for inp in inputs:
             register_callback = inp[0]
-            disable_callback = inp[1]
-            update = inp[2]
-            args = inp[3]
-            attribute_names = inp[4]
+            remove_callback = inp[1]
+            disable_callback = inp[2]
+            update = inp[3]
+            args = inp[4]
+            attribute_names = inp[5]
 
             callback.reset_mock()
             register_callback(callback)
@@ -773,8 +873,26 @@ class TestDevice:
                         getattr(device, attribute_name, "Attribute not found")
                         == arg
                     )
+            callback.assert_called_once_with(*args)
 
+            # Test callback not calling when disabled
             device._disabled_connection_callbacks = [disable_callback]
             update(*args)
-
             callback.assert_called_once_with(*args)
+
+            # Test deleting callback
+            remove_callback(callback)
+            device._disabled_connection_callbacks = []
+            update(*args)
+            callback.assert_called_once_with(*args)
+
+            # Test removing by name
+            callback.__name__ = "test_name"
+            register_callback(callback)
+            remove_callback(callback.__name__)
+            update(*args)
+            callback.assert_called_once_with(*args)
+
+        # Test removing callback that is not a function or a string
+        with pytest.raises(ValueError):
+            device._generic_remove_callback(5, lambda _: _)

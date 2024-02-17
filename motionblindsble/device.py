@@ -297,6 +297,8 @@ class MotionDevice:
     _received_end_position_info_event: Event
 
     # Disconnection
+    _permanent_connection: bool
+    _custom_setting_disconnect_time: float | None
     _disconnect_time: float | None
     _disconnect_timer: TimerHandle | Callable | None
 
@@ -363,6 +365,8 @@ class MotionDevice:
             MotionConnectionType.DISCONNECTED
         )
 
+        self._permanent_connection: bool = False
+        self._custom_setting_disconnect_time: float | None = None
         self._disconnect_time: float | None = None
         self._disconnect_timer: TimerHandle | Callable | None = None
 
@@ -387,6 +391,19 @@ class MotionDevice:
         """Set the BLEDevice for this device."""
         self.ble_device = ble_device
         self.update_signal_strength(rssi)
+
+    def set_custom_disconnect_time(self, timeout: float | None):
+        """Set a custom disconnect time."""
+        _LOGGER.debug(
+            "(%s) Set custom disconnect time to %.2fs",
+            self.ble_device.address,
+            timeout,
+        )
+        self._custom_setting_disconnect_time = timeout
+
+    def set_permanent_connection(self, permanent_connection: bool) -> None:
+        """Enable or disable a permanent connection."""
+        self._permanent_connection = permanent_connection
 
     @property
     def connection_type(self) -> MotionConnectionType:
@@ -415,10 +432,22 @@ class MotionDevice:
                 self._disconnect_timer.cancel()
 
     def refresh_disconnect_timer(
-        self, timeout: int | None = None, force: bool = False
+        self, timeout: float | None = None, force: bool = False
     ) -> None:
         """Refresh the time before the device is disconnected."""
-        timeout = SETTING_DISCONNECT_TIME if timeout is None else timeout
+        # Only enable the disconnect timer if no permanent connection
+        if self._permanent_connection:
+            return
+
+        timeout = (
+            SETTING_DISCONNECT_TIME
+            if timeout is None and self._custom_setting_disconnect_time is None
+            else (
+                timeout
+                if timeout is not None
+                else self._custom_setting_disconnect_time
+            )
+        )
         # Don't refresh if existing timeout > timeout unless forced
         new_disconnect_time = time_ns() // 1e6 + timeout * 1e3
         if (
@@ -432,8 +461,10 @@ class MotionDevice:
         self.cancel_disconnect_timer()
 
         async def _disconnect_later(_: datetime | None = None):
+            if self._permanent_connection:
+                return
             _LOGGER.debug(
-                "(%s) Disconnecting after %is",
+                "(%s) Disconnecting after %.2fs",
                 self.ble_device.address,
                 timeout,
             )
@@ -442,7 +473,7 @@ class MotionDevice:
         self._disconnect_time = new_disconnect_time
         if self._ha_call_later:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %i"
+                "(%s) Refreshing disconnect timeout to %.2fs"
                 " using Home Assistant",
                 self.ble_device.address,
                 timeout,
@@ -452,7 +483,7 @@ class MotionDevice:
             )  # type: ignore[call-arg]
         else:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %is",
+                "(%s) Refreshing disconnect timeout to %.2f",
                 self.ble_device.address,
                 timeout,
             )
@@ -481,32 +512,17 @@ class MotionDevice:
                 else MotionPositionInfo(decrypted_message_bytes[4])
             )
             end_position_info.update_end_positions(decrypted_message_bytes[4])
-            self.update_position(position, tilt)
-            self.update_end_position_info(end_position_info)
-            self.update_running(MotionRunningType.STILL)
-            for feedback_callback in self._feedback_callbacks:
-                feedback_callback(
-                    position,
-                    tilt,
-                    end_position_info,
-                )
-            _LOGGER.debug(
-                (
-                    "(%s) Received feedback; position: %s, tilt: %s, "
-                    "top position set: %s, bottom position set: %s, "
-                    "favorite position set: %s"
-                ),
-                self.ble_device.address,
-                str(position),
-                str(tilt),
-                end_position_info.up,
-                end_position_info.down,
-                end_position_info.favorite,
-            )
+            self.update_feedback(position, tilt, end_position_info)
         elif decrypted_message.startswith(MotionNotificationType.STATUS.value):
             position: int = decrypted_message_bytes[6]
             tilt: int = decrypted_message_bytes[7]
             battery_percentage: int = decrypted_message_bytes[17]
+            try:
+                speed_level: MotionSpeedLevel | None = MotionSpeedLevel(
+                    decrypted_message_bytes[12]
+                )
+            except ValueError:
+                speed_level = None
             end_position_info = MotionPositionInfo(
                 decrypted_message_bytes[4],
                 int.from_bytes(
@@ -517,38 +533,12 @@ class MotionDevice:
                     "little",
                 ),
             )
-            try:
-                speed_level: MotionSpeedLevel | None = MotionSpeedLevel(
-                    decrypted_message_bytes[12]
-                )
-            except ValueError:
-                speed_level = None
-            self.update_position(position, tilt)
-            self.update_battery(battery_percentage)
-            self.update_end_position_info(end_position_info)
-            self.update_speed(speed_level)
-            for status_callback in self._status_callbacks:
-                status_callback(
-                    position,
-                    tilt,
-                    battery_percentage,
-                    speed_level,
-                    end_position_info,
-                )
-            _LOGGER.debug(
-                (
-                    "(%s) Received status; position: %s, tilt: %s, "
-                    "speed: %s, top position set: %s, battery: %s, "
-                    "bottom position set: %s, favorite position set: %s"
-                ),
-                self.ble_device.address,
-                str(position),
-                str(tilt),
-                str(battery_percentage),
-                speed_level.name if speed_level is not None else None,
-                end_position_info.up,
-                end_position_info.down,
-                end_position_info.favorite,
+            self.update_status(
+                position,
+                tilt,
+                battery_percentage,
+                speed_level,
+                end_position_info,
             )
 
     def _disconnect_callback(self, _: BleakClient) -> None:
@@ -574,7 +564,11 @@ class MotionDevice:
                 disable_callbacks if disable_callbacks is not None else []
             )
             self._received_end_position_info_event.clear()
-            return await self._connection_queue.wait_for_connection(self)
+            try:
+                return await self._connection_queue.wait_for_connection(self)
+            except Exception as e:
+                self.update_connection(MotionConnectionType.DISCONNECTED)
+                raise e
         self.refresh_disconnect_timer()
         return True
 
@@ -833,6 +827,78 @@ class MotionDevice:
             < SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME * 1e9
         )
 
+    def update_status(
+        self,
+        position: int | None,
+        tilt: int | None,
+        battery_percentage: int | None,
+        speed_level: MotionSpeedLevel | None,
+        end_position_info: MotionPositionInfo | None,
+    ) -> None:
+        """Update the status (position, tilt, battery percentage, speed level,
+        end position info)."""
+        _LOGGER.debug(
+            (
+                "(%s) Received status; position: %s, tilt: %s, "
+                "speed: %s, top position set: %s, battery: %s, "
+                "bottom position set: %s, favorite position set: %s"
+            ),
+            self.ble_device.address,
+            str(position),
+            str(tilt),
+            str(battery_percentage),
+            speed_level.name if speed_level is not None else None,
+            end_position_info.up,
+            end_position_info.down,
+            end_position_info.favorite,
+        )
+        self.update_position(position, tilt)
+        self.update_battery(battery_percentage)
+        self.update_speed(speed_level)
+        self.update_end_position_info(end_position_info)
+        if self._is_connection_callback_disabled(MotionCallback.STATUS):
+            return
+        for status_callback in self._status_callbacks:
+            status_callback(
+                position,
+                tilt,
+                battery_percentage,
+                speed_level,
+                end_position_info,
+            )
+
+    def update_feedback(
+        self,
+        position: int | None,
+        tilt: int | None,
+        end_position_info: MotionPositionInfo | None,
+    ) -> None:
+        """Update the feedback (postion, tilt, end position info)."""
+        _LOGGER.debug(
+            (
+                "(%s) Received feedback; position: %s, tilt: %s, "
+                "top position set: %s, bottom position set: %s, "
+                "favorite position set: %s"
+            ),
+            self.ble_device.address,
+            str(position),
+            str(tilt),
+            end_position_info.up,
+            end_position_info.down,
+            end_position_info.favorite,
+        )
+        self.update_position(position, tilt)
+        self.update_end_position_info(end_position_info)
+        self.update_running(MotionRunningType.STILL)
+        if self._is_connection_callback_disabled(MotionCallback.FEEDBACK):
+            return
+        for feedback_callback in self._feedback_callbacks:
+            feedback_callback(
+                position,
+                tilt,
+                end_position_info,
+            )
+
     def update_connection(self, connection_type: MotionConnectionType) -> None:
         """Update the connection to a particular connection type."""
         _LOGGER.debug(
@@ -1028,6 +1094,77 @@ class MotionDevice:
     ) -> None:
         """Register the callback used to update the signal strength."""
         self._signal_strength_callbacks.append(callback)
+
+    def _generic_remove_callback(
+        self, identifier: Union[Callable, str], callback_list: list[Callable]
+    ):
+        """Generic function to remove a callback from a callback list."""
+        if callable(identifier):  # Remove by reference
+            callback_list[:] = [cb for cb in callback_list if cb != identifier]
+        elif isinstance(identifier, str):  # Remove by function name
+            callback_list[:] = [
+                cb for cb in callback_list if cb.__name__ != identifier
+            ]
+        else:
+            raise ValueError("Identifier must be a callable or a string.")
+
+    def remove_status_callback(self, identifier: Union[Callable, str]) -> None:
+        """Remove a status callback."""
+        self._generic_remove_callback(identifier, self._status_callbacks)
+
+    def remove_feedback_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a feedback callback."""
+        self._generic_remove_callback(identifier, self._feedback_callbacks)
+
+    def remove_position_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a position callback."""
+        self._generic_remove_callback(identifier, self._position_callbacks)
+
+    def remove_battery_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a battery callback."""
+        self._generic_remove_callback(identifier, self._battery_callbacks)
+
+    def remove_end_position_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove an end position info callback."""
+        self._generic_remove_callback(identifier, self._end_position_callbacks)
+
+    def remove_speed_callback(self, identifier: Union[Callable, str]) -> None:
+        """Remove a speed callback."""
+        self._generic_remove_callback(identifier, self._speed_callbacks)
+
+    def remove_connection_callback(
+        self, identifier: Union[Callable[[MotionConnectionType], None], str]
+    ) -> None:
+        """Remove a connection callback."""
+        self._generic_remove_callback(identifier, self._connection_callbacks)
+
+    def remove_calibration_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a calibration callback."""
+        self._generic_remove_callback(identifier, self._calibration_callbacks)
+
+    def remove_running_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a running callback."""
+        self._generic_remove_callback(identifier, self._running_callbacks)
+
+    def remove_signal_strength_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
+        """Remove a signal strength callback."""
+        self._generic_remove_callback(
+            identifier, self._signal_strength_callbacks
+        )
 
 
 class NoEndPositionsException(Exception):
