@@ -286,7 +286,6 @@ class TestDeviceConnection:
 
         # Test establish normal connection
         await device.establish_connection()
-        device._current_bleak_client.set_disconnected_callback.assert_called_once()
         # pylint: disable=no-member
         device.refresh_disconnect_timer.assert_called()
         mock_update_connection.assert_has_calls(

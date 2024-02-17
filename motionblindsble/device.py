@@ -491,7 +491,7 @@ class MotionDevice:
                 timeout,
             )
             self._disconnect_timer = get_event_loop().call_later(
-                timeout, create_task, _disconnect_later()
+                timeout, lambda: create_task(_disconnect_later())
             )
 
     def _notification_callback(
@@ -604,6 +604,7 @@ class MotionDevice:
             self.ble_device,
             self.ble_device.address,
             max_attempts=SETTING_MAX_CONNECT_ATTEMPTS,
+            disconnected_callback=self._disconnect_callback,
         )
 
         self._current_bleak_client = bleak_client
@@ -629,7 +630,6 @@ class MotionDevice:
         self._connect_status_query_time = time_ns()
         await self.status_query()
 
-        bleak_client.set_disconnected_callback(self._disconnect_callback)
         self.refresh_disconnect_timer()
 
         return True
