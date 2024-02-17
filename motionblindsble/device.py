@@ -259,7 +259,6 @@ class ConnectionQueue:
             return False
 
         except (BleakOutOfConnectionSlotsError, BleakNotFoundError) as e:
-            device.update_connection(MotionConnectionType.DISCONNECTED)
             self._connection_task = None
             raise e
 
@@ -571,6 +570,9 @@ class MotionDevice:
             try:
                 return await self._connection_queue.wait_for_connection(self)
             except Exception as e:
+                _LOGGER.error(
+                    "(%s) Could not connect to blind", self.ble_device.address
+                )
                 self.update_connection(MotionConnectionType.DISCONNECTED)
                 raise e
         self.refresh_disconnect_timer()
