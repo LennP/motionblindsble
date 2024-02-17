@@ -449,7 +449,7 @@ class TestDeviceConnection:
 
         # Test permanent connection, no disconnect timer
         mock_time_ns.reset_mock()
-        device.set_permanent_connection(True)
+        await device.set_permanent_connection(True)
         device.refresh_disconnect_timer()
         assert mock_time_ns.call_count == 0
 
@@ -473,16 +473,16 @@ class TestDeviceConnection:
         device._ha_call_later = Mock(side_effect=call_later_condition)
         # First set it to False and pass first line of refresh_disconnect_timer
         # and make sure that a _disconnect_later is created
-        device.set_permanent_connection(False)
+        await device.set_permanent_connection(False)
         device.refresh_disconnect_timer()
         # Set _permanent_connection to True and after that
         # _disconnect_later can be called
-        device.set_permanent_connection(True)
+        await device.set_permanent_connection(True)
         await asyncio.sleep(
             0
         )  # Wait for _disconnect_later to finish in event loop
         permanent_connection_enabled.set()
-        assert mock_disconnect.call_count == 0
+        assert mock_disconnect.call_count == 1
 
 
 class TestDevice:

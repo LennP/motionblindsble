@@ -401,9 +401,13 @@ class MotionDevice:
         )
         self._custom_setting_disconnect_time = timeout
 
-    def set_permanent_connection(self, permanent_connection: bool) -> None:
+    async def set_permanent_connection(
+        self, permanent_connection: bool
+    ) -> None:
         """Enable or disable a permanent connection."""
         self._permanent_connection = permanent_connection
+        if not permanent_connection:
+            await self.disconnect()
 
     @property
     def connection_type(self) -> MotionConnectionType:
