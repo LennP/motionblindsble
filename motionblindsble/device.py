@@ -52,6 +52,7 @@ from .const import (
     MotionSpeedLevel,
 )
 from .crypt import MotionCrypt
+from .util import discover_device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -383,6 +384,20 @@ class MotionDevice:
         self._calibration_callbacks = []
         self._running_callbacks = []
         self._signal_strength_callbacks = []
+
+    @staticmethod
+    async def discover(mac: str) -> MotionDevice | None:
+        """
+        Discover a Motionblind using a MAC address or MAC code,
+        such as A4:C1:38:00:2D:FB, A4C138002DFB or 2DFB.
+        """
+        _LOGGER.warning(
+            "(%s) Discovering BLEDevice",
+            mac,
+        )
+        result = await discover_device(mac)
+        ble_device = result[0] if result is not None else None
+        return MotionDevice(ble_device) if ble_device is not None else None
 
     def set_ble_device(
         self, ble_device: BLEDevice, rssi: int | None = None

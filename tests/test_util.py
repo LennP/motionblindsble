@@ -3,13 +3,13 @@
 from unittest.mock import patch, AsyncMock, Mock
 from bleak.backends.device import BLEDevice
 
-from motionblindsble.util import discover, get_device
+from motionblindsble.util import discover, discover_device
 
 
 class TestUtil:
     """Test util functions in util.py."""
 
-    async def test_discover_motionblinds(self):
+    async def test_discover(self) -> None:
         """Test the discover Motionblinds function."""
         # Mock BLE devices and advertisement data
         mock_devices_advertisements = {
@@ -43,7 +43,7 @@ class TestUtil:
             assert discovered == expected_devices
 
     @patch("motionblindsble.util.discover")
-    async def test_get_device(self, mock_discover):
+    async def test_discover_device(self, mock_discover) -> None:
         """Test the get_device function."""
         # Mock BLE devices and advertisement data
         mock_devices_advertisements = {
@@ -59,19 +59,19 @@ class TestUtil:
         mock_discover.return_value = mock_devices_advertisements.values()
 
         assert (
-            await get_device("4455")
+            await discover_device("4455")
             == mock_devices_advertisements["00:11:22:33:44:55"]
         )
         assert (
-            await get_device("001122334455")
+            await discover_device("001122334455")
             == mock_devices_advertisements["00:11:22:33:44:55"]
         )
         assert (
-            await get_device("00:11:22:33:44:55")
+            await discover_device("00:11:22:33:44:55")
             == mock_devices_advertisements["00:11:22:33:44:55"]
         )
         assert (
-            await get_device("abcd")
+            await discover_device("abcd")
             == mock_devices_advertisements["00:11:22:33:AB:CD"]
         )
-        assert await get_device("aaaa") is None
+        assert await discover_device("aaaa") is None

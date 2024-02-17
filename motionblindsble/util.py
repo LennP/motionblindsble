@@ -25,7 +25,7 @@ async def discover(
     return motion_devices_advertisements
 
 
-async def get_device(
+async def discover_device(
     mac: str, *args, **kwargs
 ) -> tuple[BLEDevice, AdvertisementData] | None:
     """

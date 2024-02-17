@@ -502,6 +502,24 @@ class TestDevice:
         device2 = MotionDevice(ble_device2.address)
         assert device2.ble_device.address == ble_device2.address
 
+    @patch("motionblindsble.device.discover_device")
+    async def test_init_discover(self, mock_discover_device) -> None:
+        """Test initializing a MotionDevice with discover function."""
+        # Test no device found
+        mock_discover_device.return_value = None
+        device = await MotionDevice.discover("00:11:22:33:44:55")
+        assert device is None
+
+        # Test device found
+        ble_device = Mock()
+        ble_device.__class__ = BLEDevice
+        ble_device.address = "00:11:22:33:44:55"
+        advertisement_data = Mock()
+        mock_discover_device.return_value = (ble_device, advertisement_data)
+        device = await MotionDevice.discover("00:11:22:33:44:55")
+        assert device is not None
+        assert device.ble_device is ble_device
+
     def test_setters(self) -> None:
         """Test initializing a MotionDevice."""
         device = MotionDevice("00:11:22:33:44:55")
