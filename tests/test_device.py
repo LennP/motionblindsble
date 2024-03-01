@@ -174,8 +174,8 @@ class TestDeviceConnection:
 
         # Test creation of connect task with Home Assistant
         mock_ha_create_task = Mock()
-        connection_queue.set_ha_create_task(mock_ha_create_task)
-        assert connection_queue._ha_create_task is not None
+        device.set_ha_create_task(mock_ha_create_task)
+        assert device._ha_create_task is not None
         with patch(
             "motionblindsble.device.MotionDevice.establish_connection",
             AsyncMock(return_value=True),
@@ -393,6 +393,14 @@ class TestDeviceConnection:
         assert not await device.disconnect()
         device._connection_queue.cancel.assert_called_once()
 
+    @patch(
+        "motionblindsble.device.establish_connection",
+        AsyncMock(),
+    )
+    @patch(
+        "motionblindsble.crypt.MotionCrypt.get_time",
+        Mock(return_value=""),
+    )
     @patch("motionblindsble.device.MotionDevice.disconnect")
     @patch("motionblindsble.device.time_ns")
     async def test_refresh_disconnect_timer(
@@ -447,8 +455,8 @@ class TestDeviceConnection:
         mock_disconnect.assert_called_once()
 
         # Test permanent connection, no disconnect timer
-        mock_time_ns.reset_mock()
         await device.set_permanent_connection(True)
+        mock_time_ns.reset_mock()
         device.refresh_disconnect_timer()
         assert mock_time_ns.call_count == 0
 
@@ -482,6 +490,26 @@ class TestDeviceConnection:
         )  # Wait for _disconnect_later to finish in event loop
         permanent_connection_enabled.set()
         assert mock_disconnect.call_count == 1
+
+    @patch("motionblindsble.device.MotionDevice.connect")
+    async def test_permanent_connection(self, mock_connect) -> None:
+        """Test the permanent connection function."""
+        device = MotionDevice("00:11:22:33:44:55")
+        device._disconnect_callback(Mock())
+        assert mock_connect.call_count == 0
+
+        # Test normal permanent connection
+        await device.set_permanent_connection(True)
+        assert mock_connect.call_count == 1
+        device._disconnect_callback(Mock())
+        assert mock_connect.call_count == 2
+
+        # Test permanent connection with Home Assistant
+        mock_ha_create_task = Mock()
+        device.set_ha_create_task(mock_ha_create_task)
+        await device.set_permanent_connection(True)
+        device._disconnect_callback(Mock())
+        assert mock_ha_create_task.call_count == 1
 
 
 class TestDevice:
@@ -527,7 +555,7 @@ class TestDevice:
         mock2 = Mock()
         device.set_ha_create_task(mock)
         device.set_ha_call_later(mock2)
-        assert device._connection_queue._ha_create_task is mock
+        assert device._ha_create_task is mock
         assert device._ha_call_later is mock2
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
