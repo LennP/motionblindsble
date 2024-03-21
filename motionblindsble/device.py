@@ -234,12 +234,12 @@ class ConnectionQueue:
         """Create a connection task."""
         # pylint: disable=protected-access
         # type: ignore[call-arg]
-        if device._ha_create_task:
+        if device._create_task:
             _LOGGER.debug(
-                "(%s) Connecting using Home Assistant",
+                "(%s) Connecting using create_task",
                 device.ble_device.address,
             )
-            return device._ha_create_task(target=device.establish_connection())
+            return device._create_task(target=device.establish_connection())
         _LOGGER.debug("(%s) Connecting", device.ble_device.address)
         return get_event_loop().create_task(device.establish_connection())
 
@@ -316,9 +316,9 @@ class MotionDevice:
     _disconnect_time: float | None
     _disconnect_timer: TimerHandle | Callable | None
 
-    # Callbacks that are used to interface with HA
-    _ha_create_task: Callable[[Coroutine], Task] | None = None
-    _ha_call_later: Callable[[int, Coroutine], Callable] | None = None
+    # Custom function that are used to create and schedule tasks
+    _create_task: Callable[[Coroutine], Task] | None = None
+    _call_later: Callable[[int, Coroutine], Callable] | None = None
 
     # Callbacks
     _connect_status_query_time: float | None
@@ -455,17 +455,17 @@ class MotionDevice:
         """Return the connection type."""
         return self._connection_type
 
-    def set_ha_create_task(
-        self, ha_create_task: Callable[[Coroutine], Task]
+    def set_create_task_factory(
+        self, _create_task: Callable[[Coroutine], Task]
     ) -> None:
         """Set the create_task function to use."""
-        self._ha_create_task = ha_create_task
+        self._create_task = _create_task
 
-    def set_ha_call_later(
-        self, ha_call_later: Callable[[int, Coroutine], Callable]
+    def set_call_later_factory(
+        self, _call_later: Callable[[int, Coroutine], Callable]
     ) -> None:
         """Set the call_later function to use."""
-        self._ha_call_later = ha_call_later
+        self._call_later = _call_later
 
     def cancel_disconnect_timer(self) -> None:
         """Cancel the disconnect timeout."""
@@ -516,14 +516,14 @@ class MotionDevice:
             await self.disconnect()
 
         self._disconnect_time = new_disconnect_time
-        if self._ha_call_later:
+        if self._call_later:
             _LOGGER.debug(
                 "(%s) Refreshing disconnect timeout to %.2fs"
-                " using Home Assistant",
+                " using call_later",
                 self.ble_device.address,
                 timeout,
             )
-            self._disconnect_timer = self._ha_call_later(
+            self._disconnect_timer = self._call_later(
                 delay=timeout, action=_disconnect_later
             )  # type: ignore[call-arg]
         else:
@@ -596,12 +596,12 @@ class MotionDevice:
         self.update_speed(None)
         self._current_bleak_client = None
         if self._permanent_connection:
-            if self._ha_create_task:
+            if self._create_task:
                 _LOGGER.debug(
-                    "(%s) Automatically reconnecting using Home Assistant",
+                    "(%s) Automatically reconnecting using create_task",
                     self.ble_device.address,
                 )
-                self._ha_create_task(target=self.connect())  # type: ignore[call-arg]
+                self._create_task(target=self.connect())  # type: ignore[call-arg]
             else:
                 _LOGGER.debug(
                     "(%s) Automatically reconnecting", self.ble_device.address

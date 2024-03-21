@@ -174,15 +174,15 @@ class TestDeviceConnection:
             connection_queue._create_connection_task(device)
 
         # Test creation of connect task with Home Assistant
-        mock_ha_create_task = Mock()
-        device.set_ha_create_task(mock_ha_create_task)
-        assert device._ha_create_task is not None
+        mock_create_task = Mock()
+        device.set_create_task_factory(mock_create_task)
+        assert device._create_task is not None
         with patch(
             "motionblindsble.device.MotionDevice.establish_connection",
             AsyncMock(return_value=True),
         ):
             connection_queue._create_connection_task(device)
-        mock_ha_create_task.assert_called()
+        mock_create_task.assert_called()
 
     @patch("motionblindsble.device.ConnectionQueue._create_connection_task")
     @patch("motionblindsble.device.wait")
@@ -437,7 +437,7 @@ class TestDeviceConnection:
         device.refresh_disconnect_timer()
         assert device._disconnect_time == 9999000
 
-        # Test with _ha_call_later and _disconnect_later:
+        # Test with _call_later and _disconnect_later:
         def call_later(delay: int, action):
             # Run immediately instead of after delay
             loop = asyncio.get_event_loop()
@@ -446,9 +446,9 @@ class TestDeviceConnection:
             else:
                 asyncio.run(action())
 
-        device._ha_call_later = Mock(side_effect=call_later)
+        device._call_later = Mock(side_effect=call_later)
         device.refresh_disconnect_timer()
-        device._ha_call_later.assert_called_once()
+        device._call_later.assert_called_once()
 
         await asyncio.sleep(
             0
@@ -478,7 +478,7 @@ class TestDeviceConnection:
                 asyncio.run(call_once_condition_is_met(action))
 
         mock_disconnect.reset_mock()
-        device._ha_call_later = Mock(side_effect=call_later_condition)
+        device._call_later = Mock(side_effect=call_later_condition)
         # First set it to False and pass first line of refresh_disconnect_timer
         # and make sure that a _disconnect_later is created
         await device.set_permanent_connection(False)
@@ -506,11 +506,11 @@ class TestDeviceConnection:
         assert mock_connect.call_count == 2
 
         # Test permanent connection with Home Assistant
-        mock_ha_create_task = Mock()
-        device.set_ha_create_task(mock_ha_create_task)
+        mock_create_task = Mock()
+        device.set_create_task_factory(mock_create_task)
         await device.set_permanent_connection(True)
         device._disconnect_callback(Mock())
-        assert mock_ha_create_task.call_count == 1
+        assert mock_create_task.call_count == 1
 
 
 class TestDevice:
@@ -554,10 +554,10 @@ class TestDevice:
         device = MotionDevice("00:11:22:33:44:55")
         mock = Mock()
         mock2 = Mock()
-        device.set_ha_create_task(mock)
-        device.set_ha_call_later(mock2)
-        assert device._ha_create_task is mock
-        assert device._ha_call_later is mock2
+        device.set_create_task_factory(mock)
+        device.set_call_later_factory(mock2)
+        assert device._create_task is mock
+        assert device._call_later is mock2
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
     async def test_notification_callback(self) -> None:
