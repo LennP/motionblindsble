@@ -17,6 +17,7 @@ from asyncio import (
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
+from enum import IntEnum
 from time import time, time_ns
 from typing import Any, Union
 from zoneinfo import ZoneInfo
@@ -121,7 +122,8 @@ def requires_end_positions(
                     # Continue with the command, will start auto-calibration
             elif (
                 self._end_position_info is not None
-                and not self._end_position_info.up
+                and self._end_position_info.end_positions
+                is not MotionEndPositions.BOTH
             ):
                 self.refresh_disconnect_timer()
                 if self.blind_type is MotionBlindType.VERTICAL:
@@ -166,7 +168,7 @@ def requires_favorite_position(func: Callable) -> Callable:
         # pylint: disable=protected-access
         if (
             self._end_position_info is not None
-            and not self._end_position_info.favorite
+            and not self._end_position_info.favorite_position
         ):
             self.refresh_disconnect_timer()
             # If no favorite position is set an exception is raised
@@ -181,27 +183,43 @@ def requires_favorite_position(func: Callable) -> Callable:
     return wrapper
 
 
+class MotionEndPositions(IntEnum):
+    """Information on how many end positions are set."""
+
+    NONE = 0
+    ONE = 1
+    BOTH = 2
+
+    @classmethod
+    def from_hex(cls, hex_value: int) -> MotionEndPositions | None:
+        """Return the number of end positions set."""
+        mapping = {
+            0x02: cls.NONE,
+            0x0A: cls.ONE,
+            0x0E: cls.BOTH,
+        }
+        return mapping.get(hex_value, None)
+
+
 @dataclass
 class MotionPositionInfo:
     """Information on whether end positions and favorite position are set."""
 
-    up: bool
-    down: bool
-    favorite: bool | None = None
+    end_positions: MotionEndPositions
+    favorite_position: bool | None
 
     def __init__(
         self, end_positions_byte: int, favorite_bytes: int | None = None
     ) -> None:
         """Initialize the MotionPositionInfo."""
-        self.up = bool(end_positions_byte & 0x08)
-        self.down = bool(end_positions_byte & 0x04)
-        if favorite_bytes is not None:
-            self.favorite = bool(favorite_bytes & 0x8000)
+        self.end_positions = MotionEndPositions.from_hex(end_positions_byte)
+        self.favorite_position = (
+            bool(favorite_bytes) if favorite_bytes is not None else None
+        )
 
     def update_end_positions(self, end_positions_byte: int):
         """Update the end positions."""
-        self.up = bool(end_positions_byte & 0x08)
-        self.down = bool(end_positions_byte & 0x04)
+        self.end_positions = MotionEndPositions.from_hex(end_positions_byte)
 
 
 class ConnectionQueue:
@@ -882,17 +900,16 @@ class MotionDevice:
         _LOGGER.debug(
             (
                 "(%s) Received status; position: %s, tilt: %s, "
-                "battery: %s, speed: %s, top position set: %s, "
-                "bottom position set: %s, favorite position set: %s"
+                "battery: %s, speed: %s, end positions: %s, "
+                "favorite position set: %s"
             ),
             self.ble_device.address,
             str(position),
             str(tilt),
             str(battery_percentage),
             speed_level.name if speed_level is not None else None,
-            end_position_info.up,
-            end_position_info.down,
-            end_position_info.favorite,
+            end_position_info.end_positions,
+            end_position_info.favorite_position,
         )
         self.update_position(position, tilt)
         self.update_battery(battery_percentage)
@@ -919,15 +936,13 @@ class MotionDevice:
         _LOGGER.debug(
             (
                 "(%s) Received feedback; position: %s, tilt: %s, "
-                "top position set: %s, bottom position set: %s, "
-                "favorite position set: %s"
+                "end positions: %s, favorite position set: %s "
             ),
             self.ble_device.address,
             str(position),
             str(tilt),
-            end_position_info.up,
-            end_position_info.down,
-            end_position_info.favorite,
+            end_position_info.end_positions,
+            end_position_info.favorite_position,
         )
         self.update_position(position, tilt)
         self.update_end_position_info(end_position_info)
@@ -1016,13 +1031,12 @@ class MotionDevice:
         """Update the end_position_info."""
         _LOGGER.debug(
             (
-                "(%s) Updating end position info; top position set: %s, "
-                "bottom position set: %s, favorite position set: %s"
+                "(%s) Updating end position info; end positions: %s, "
+                "favorite position set: %s"
             ),
             self.ble_device.address,
-            end_position_info.up,
-            end_position_info.down,
-            end_position_info.favorite,
+            end_position_info.end_positions,
+            end_position_info.favorite_position,
         )
         self._end_position_info = end_position_info
         self.update_calibration(
@@ -1030,7 +1044,8 @@ class MotionDevice:
             if end_position_info is None
             else (
                 MotionCalibrationType.CALIBRATED
-                if self._end_position_info.up
+                if self._end_position_info.end_positions
+                is MotionEndPositions.BOTH
                 else MotionCalibrationType.UNCALIBRATED
             )
         )

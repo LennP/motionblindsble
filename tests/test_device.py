@@ -19,6 +19,7 @@ from motionblindsble.device import (
     ConnectionQueue,
     MotionConnectionType,
     MotionDevice,
+    MotionEndPositions,
     MotionNotificationType,
     MotionRunningType,
     MotionCalibrationType,
@@ -65,7 +66,7 @@ class TestDeviceDecorators:
                 # Set end positions after Event.wait() is called
                 device.update_end_position_info(
                     MotionPositionInfo(
-                        0xFF, 0xFFFF
+                        0x0E, 0xFFFF
                     )  # Simulating end positions being set
                 )
 
@@ -121,7 +122,7 @@ class TestDeviceDecorators:
         device = MotionDevice("00:11:22:33:44:55")
         device.update_end_position_info(
             MotionPositionInfo(
-                0xFF, 0xFFFF
+                0x0E, 0xFFFF
             )  # Simulating end positions being set
         )
         device.register_running_callback(lambda _: None)
@@ -581,9 +582,8 @@ class TestDevice:
                 100, 180, device._end_position_info
             )
         assert (
-            not device._end_position_info.up
-            and not device._end_position_info.down
-            and device._end_position_info.favorite is None
+            device._end_position_info is not MotionEndPositions.NONE
+            and device._end_position_info.favorite_position is None
         )
 
         # Test FEEDBACK notification without end positions
@@ -593,7 +593,7 @@ class TestDevice:
             None,
             bytearray.fromhex(
                 MotionNotificationType.FEEDBACK.value
-                + "0c"
+                + "0e"
                 + "00"
                 + "00"
                 + "00"
@@ -604,9 +604,8 @@ class TestDevice:
                 0, 0, device._end_position_info
             )
         assert (
-            device._end_position_info.up
-            and device._end_position_info.down
-            and device._end_position_info.favorite is None
+            device._end_position_info.end_positions is MotionEndPositions.BOTH
+            and device._end_position_info.favorite_position is None
         )
 
         # Test STATUS notification with end positions
@@ -617,7 +616,7 @@ class TestDevice:
             None,
             bytearray.fromhex(
                 MotionNotificationType.STATUS.value
-                + "0C"
+                + "0E"
                 + "00"
                 + "64"
                 + "B4"
@@ -639,9 +638,8 @@ class TestDevice:
             )
         assert device._end_position_info is not None
         assert (
-            device._end_position_info.up
-            and device._end_position_info.down
-            and device._end_position_info.favorite
+            device._end_position_info.end_positions is MotionEndPositions.BOTH
+            and device._end_position_info.favorite_position
         )
 
         # Test STATUS notification without end positions
@@ -745,7 +743,7 @@ class TestDevice:
     async def test_commands(self) -> None:
         """Test sending different commands."""
         device = MotionDevice("00:11:22:33:44:55")
-        device.update_end_position_info(MotionPositionInfo(0xFF, 0xFFFF))
+        device.update_end_position_info(MotionPositionInfo(0x0E, 0xFFFF))
 
         call_counter = 0
         test_commands = [
@@ -807,7 +805,7 @@ class TestDevice:
                     5,
                     10,
                     MotionSpeedLevel.HIGH,
-                    MotionPositionInfo(0xFF, 0xFFFF),
+                    MotionPositionInfo(0x0E, 0xFFFF),
                 ],
                 [
                     "_position",
@@ -825,7 +823,7 @@ class TestDevice:
                 [
                     5,
                     5,
-                    MotionPositionInfo(0xFF, 0xFFFF),
+                    MotionPositionInfo(0x0E, 0xFFFF),
                 ],
                 [
                     "_position",
@@ -838,7 +836,7 @@ class TestDevice:
                 device.remove_end_position_callback,
                 MotionCallback.END_POSITION_INFO,
                 device.update_end_position_info,
-                [MotionPositionInfo(0xFF, 0xFFFF)],
+                [MotionPositionInfo(0x0E, 0xFFFF)],
                 ["_end_position_info"],
             ),
             (
