@@ -589,11 +589,11 @@ class MotionDevice:
     def _disconnect_callback(self, _: BleakClient) -> None:
         """Handle a BleakClient disconnect."""
         _LOGGER.debug("(%s) Disconnected", self.ble_device.address)
+        self.update_connection(MotionConnectionType.DISCONNECTED)
         self.update_calibration(None)
         self.update_running(None)
         self.update_position(None, None)
         self.update_speed(None)
-        self.update_connection(MotionConnectionType.DISCONNECTED)
         self._current_bleak_client = None
         if self._permanent_connection:
             if self._ha_create_task:
@@ -602,10 +602,11 @@ class MotionDevice:
                     self.ble_device.address,
                 )
                 self._ha_create_task(target=self.connect())  # type: ignore[call-arg]
-            _LOGGER.debug(
-                "(%s) Automatically reconnecting", self.ble_device.address
-            )
-            get_event_loop().create_task(self.connect())
+            else:
+                _LOGGER.debug(
+                    "(%s) Automatically reconnecting", self.ble_device.address
+                )
+                get_event_loop().create_task(self.connect())
 
     async def connect(
         self, disable_callbacks: list[MotionCallback] | None = None
