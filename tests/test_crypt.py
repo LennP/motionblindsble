@@ -1,7 +1,7 @@
 """Tests for the crypt.py module."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 from motionblindsble.crypt import MotionCrypt, TimezoneNotSetException
@@ -25,7 +25,7 @@ class TestCrypt:
         assert expected_encrypted == encrypted
 
     @patch("motionblindsble.crypt.datetime")
-    def test_get_time(self, mock_datetime: MagicMock) -> None:
+    def test_get_time(self, mock_datetime: Mock) -> None:
         """Test getting the time string."""
 
         MotionCrypt.set_timezone("Europe/Amsterdam")
@@ -51,4 +51,6 @@ class TestCrypt:
         MotionCrypt._timezone = None
 
         with pytest.raises(TimezoneNotSetException):
-            print(MotionCrypt.get_time())
+            MotionCrypt.get_time()
+
+        MotionCrypt.get_time(timezone=timezone.utc)

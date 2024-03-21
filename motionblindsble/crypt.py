@@ -20,9 +20,9 @@ class MotionCrypt:
     _cipher: EcbMode = AES.new(_encryption_key, AES.MODE_ECB)
 
     @staticmethod
-    def set_timezone(timezone: str) -> None:
+    def set_timezone(timezone: str | None) -> None:
         """Set the timezone for encryption, such as 'Europe/Amsterdam'."""
-        MotionCrypt._timezone = ZoneInfo(timezone)
+        MotionCrypt._timezone = ZoneInfo(timezone) if timezone is not None else None
 
     @staticmethod
     def encrypt(plaintext_hex: str) -> str:
@@ -47,18 +47,18 @@ class MotionCrypt:
     @staticmethod
     def _format_hex(number: int, number_of_chars: int = 2) -> str:
         """Format a number as a hex string with set number of characters."""
-        return hex(number & 2 ** (number_of_chars * 4) - 1)[2:].zfill(
-            number_of_chars
-        )
+        return hex(number & 2 ** (number_of_chars * 4) - 1)[2:].zfill(number_of_chars)
 
     @staticmethod
-    def get_time() -> str:
+    def get_time(timezone: tzinfo | None = None) -> str:
         """Get the current time string."""
-        if not MotionCrypt._timezone:
+        if not MotionCrypt._timezone and not timezone:
             raise TimezoneNotSetException(
                 "Motion encryption requires a valid timezone."
             )
-        now = datetime.datetime.now(MotionCrypt._timezone)
+        now = datetime.datetime.now(
+            timezone if timezone is not None else MotionCrypt._timezone
+        )
 
         year = now.year % 100
         month = now.month
@@ -74,9 +74,7 @@ class MotionCrypt:
         hour_hex = MotionCrypt._format_hex(hour)
         minute_hex = MotionCrypt._format_hex(minute)
         second_hex = MotionCrypt._format_hex(second)
-        microsecond_hex = MotionCrypt._format_hex(
-            microsecond, number_of_chars=4
-        )
+        microsecond_hex = MotionCrypt._format_hex(microsecond, number_of_chars=4)
 
         return (
             year_hex
