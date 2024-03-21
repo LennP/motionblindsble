@@ -882,7 +882,7 @@ class MotionDevice:
         _LOGGER.debug(
             (
                 "(%s) Received status; position: %s, tilt: %s, "
-                "speed: %s, top position set: %s, battery: %s, "
+                "battery: %s, speed: %s, top position set: %s, "
                 "bottom position set: %s, favorite position set: %s"
             ),
             self.ble_device.address,
@@ -1002,7 +1002,7 @@ class MotionDevice:
         _LOGGER.debug(
             "(%s) Updating speed: %s",
             self.ble_device.address,
-            speed_level,
+            speed_level.name if speed_level is not None else None,
         )
         self._speed = speed_level
         if self._is_connection_callback_disabled(MotionCallback.SPEED):
