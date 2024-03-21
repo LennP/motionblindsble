@@ -87,7 +87,9 @@ def requires_connection(
             )
 
         return decorator
-    return _requires_connection_decorator(func, disable_callback=disable_callback)
+    return _requires_connection_decorator(
+        func, disable_callback=disable_callback
+    )
 
 
 def requires_end_positions(
@@ -109,22 +111,32 @@ def requires_end_positions(
                 # on some commands that have can_calibrate_curtain set
                 if (
                     can_calibrate_curtain
-                    and self._calibration_type is MotionCalibrationType.UNCALIBRATED
+                    and self._calibration_type
+                    is MotionCalibrationType.UNCALIBRATED
                 ):
-                    self.refresh_disconnect_timer(SETTING_CALIBRATION_DISCONNECT_TIME)
+                    self.refresh_disconnect_timer(
+                        SETTING_CALIBRATION_DISCONNECT_TIME
+                    )
                     self.update_calibration(MotionCalibrationType.CALIBRATING)
                     # Continue with the command, will start auto-calibration
-            elif self._end_position_info is not None and not self._end_position_info.up:
+            elif (
+                self._end_position_info is not None
+                and not self._end_position_info.up
+            ):
                 self.refresh_disconnect_timer()
                 if self.blind_type is MotionBlindType.VERTICAL:
                     # Vertical blinds require calibration in mobile app
                     raise NotCalibratedException(
-                        EXCEPTION_NOT_CALIBRATED.format(display_name=self.display_name)
+                        EXCEPTION_NOT_CALIBRATED.format(
+                            display_name=self.display_name
+                        )
                     )
                 # If no end positions are set an exception is raised
                 self.update_running(MotionRunningType.STILL)
                 raise NoEndPositionsException(
-                    EXCEPTION_NO_END_POSITIONS.format(display_name=self.display_name)
+                    EXCEPTION_NO_END_POSITIONS.format(
+                        display_name=self.display_name
+                    )
                 )
             return await func(
                 self,
@@ -152,12 +164,17 @@ def requires_favorite_position(func: Callable) -> Callable:
 
     async def wrapper(self: MotionDevice, *args, **kwargs):
         # pylint: disable=protected-access
-        if self._end_position_info is not None and not self._end_position_info.favorite:
+        if (
+            self._end_position_info is not None
+            and not self._end_position_info.favorite
+        ):
             self.refresh_disconnect_timer()
             # If no favorite position is set an exception is raised
             self.update_running(MotionRunningType.STILL)
             raise NoFavoritePositionException(
-                EXCEPTION_NO_FAVORITE_POSITION.format(display_name=self.display_name)
+                EXCEPTION_NO_FAVORITE_POSITION.format(
+                    display_name=self.display_name
+                )
             )
         return await func(self, *args, **kwargs)
 
@@ -197,12 +214,13 @@ class ConnectionQueue:
     def _create_connection_task(self, device: MotionDevice) -> Task | Any:
         """Create a connection task."""
         # pylint: disable=protected-access
+        # type: ignore[call-arg]
         if device._ha_create_task:
             _LOGGER.debug(
                 "(%s) Connecting using Home Assistant",
                 device.ble_device.address,
             )
-            return device._ha_create_task(target=device.establish_connection())  # type: ignore[call-arg]
+            return device._ha_create_task(target=device.establish_connection())
         _LOGGER.debug("(%s) Connecting", device.ble_device.address)
         return get_event_loop().create_task(device.establish_connection())
 
@@ -287,7 +305,9 @@ class MotionDevice:
     _connect_status_query_time: float | None
     _disabled_connection_callbacks: list[MotionCallback]
     _status_callbacks: list[
-        Callable[[int, int, int, MotionSpeedLevel | None, MotionPositionInfo], None]
+        Callable[
+            [int, int, int, MotionSpeedLevel | None, MotionPositionInfo], None
+        ]
     ]
     _feedback_callbacks: list[Callable[[int, int, MotionPositionInfo], None]]
     _position_callbacks: list[Callable[[int, int], None]]
@@ -295,7 +315,9 @@ class MotionDevice:
     _speed_callbacks: list[Callable[[MotionSpeedLevel | None], None]]
     _end_position_callbacks: list[Callable[[MotionSpeedLevel | None], None]]
     _connection_callbacks: list[Callable[[MotionConnectionType], None]]
-    _calibration_callbacks: list[Callable[[MotionCalibrationType | None], None]]
+    _calibration_callbacks: list[
+        Callable[[MotionCalibrationType | None], None]
+    ]
     _running_callbacks: list[Callable[[MotionRunningType], None]]
     _signal_strength_callbacks: list[Callable[[int], None]]
 
@@ -315,7 +337,8 @@ class MotionDevice:
             self.ble_device = device
         else:
             _LOGGER.warning(
-                "(%s) Could not find BLEDevice," " creating new BLEDevice from address",
+                "(%s) Could not find BLEDevice,"
+                " creating new BLEDevice from address",
                 device,
             )
             self.ble_device = BLEDevice(
@@ -336,7 +359,9 @@ class MotionDevice:
         self._calibration_type: MotionCalibrationType | None = None
         self._end_position_info: MotionPositionInfo | None = None
         self._current_bleak_client: BleakClient | None = None
-        self._connection_type: MotionConnectionType = MotionConnectionType.DISCONNECTED
+        self._connection_type: MotionConnectionType = (
+            MotionConnectionType.DISCONNECTED
+        )
 
         self._permanent_connection: bool = False
         self._custom_setting_disconnect_time: float | None = None
@@ -376,7 +401,9 @@ class MotionDevice:
         """Set the timezone for encryption, such as 'Europe/Amsterdam'."""
         self.timezone = ZoneInfo(timezone) if timezone is not None else None
 
-    def set_ble_device(self, ble_device: BLEDevice, rssi: int | None = None) -> None:
+    def set_ble_device(
+        self, ble_device: BLEDevice, rssi: int | None = None
+    ) -> None:
         """Set the BLEDevice for this device."""
         self.ble_device = ble_device
         self.update_signal_strength(rssi)
@@ -394,7 +421,9 @@ class MotionDevice:
         )
         self._custom_setting_disconnect_time = timeout
 
-    async def set_permanent_connection(self, permanent_connection: bool) -> None:
+    async def set_permanent_connection(
+        self, permanent_connection: bool
+    ) -> None:
         """Enable or disable a permanent connection."""
         self._permanent_connection = permanent_connection
         if permanent_connection:
@@ -407,7 +436,9 @@ class MotionDevice:
         """Return the connection type."""
         return self._connection_type
 
-    def set_ha_create_task(self, ha_create_task: Callable[[Coroutine], Task]) -> None:
+    def set_ha_create_task(
+        self, ha_create_task: Callable[[Coroutine], Task]
+    ) -> None:
         """Set the create_task function to use."""
         self._ha_create_task = ha_create_task
 
@@ -438,7 +469,9 @@ class MotionDevice:
             SETTING_DISCONNECT_TIME
             if timeout is None and self._custom_setting_disconnect_time is None
             else (
-                timeout if timeout is not None else self._custom_setting_disconnect_time
+                timeout
+                if timeout is not None
+                else self._custom_setting_disconnect_time
             )
         )
         # Don't refresh if existing timeout > timeout unless forced
@@ -466,7 +499,8 @@ class MotionDevice:
         self._disconnect_time = new_disconnect_time
         if self._ha_call_later:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2fs" " using Home Assistant",
+                "(%s) Refreshing disconnect timeout to %.2fs"
+                " using Home Assistant",
                 self.ble_device.address,
                 timeout,
             )
@@ -549,7 +583,9 @@ class MotionDevice:
                     self.ble_device.address,
                 )
                 self._ha_create_task(target=self.connect())  # type: ignore[call-arg]
-            _LOGGER.debug("(%s) Automatically reconnecting", self.ble_device.address)
+            _LOGGER.debug(
+                "(%s) Automatically reconnecting", self.ble_device.address
+            )
             get_event_loop().create_task(self.connect())
 
     async def connect(
@@ -736,7 +772,9 @@ class MotionDevice:
         )
         assert not position < 0 and not position > 100
         command_prefix = (
-            str(MotionCommandType.PERCENT.value) + hex(position)[2:].zfill(2) + "00"
+            str(MotionCommandType.PERCENT.value)
+            + hex(position)[2:].zfill(2)
+            + "00"
         )
         return await self._send_command(command_prefix)
 
@@ -801,7 +839,9 @@ class MotionDevice:
     async def open_tilt(self) -> bool:
         """Tilt the device open."""
         self.update_running(MotionRunningType.OPENING)
-        command_prefix = str(MotionCommandType.ANGLE.value) + "00" + hex(0)[2:].zfill(2)
+        command_prefix = (
+            str(MotionCommandType.ANGLE.value) + "00" + hex(0)[2:].zfill(2)
+        )
         return await self._send_command(command_prefix)
 
     @requires_connection
@@ -814,10 +854,14 @@ class MotionDevice:
         )
         return await self._send_command(command_prefix)
 
-    def _disable_connection_callbacks(self, callbacks: list[MotionCallback]) -> None:
+    def _disable_connection_callbacks(
+        self, callbacks: list[MotionCallback]
+    ) -> None:
         self._disabled_connection_callbacks = callbacks
 
-    def _is_connection_callback_disabled(self, callback: MotionCallback) -> bool:
+    def _is_connection_callback_disabled(
+        self, callback: MotionCallback
+    ) -> bool:
         return (
             callback in self._disabled_connection_callbacks
             and self._connect_status_query_time is not None
@@ -925,7 +969,9 @@ class MotionDevice:
         for calibration_callback in self._calibration_callbacks:
             calibration_callback(calibration_type)
 
-    def update_running(self, running_type: MotionCalibrationType | None) -> None:
+    def update_running(
+        self, running_type: MotionCalibrationType | None
+    ) -> None:
         """Update the running to a particular running type."""
         _LOGGER.debug(
             "(%s) Updating running: %s",
@@ -989,7 +1035,9 @@ class MotionDevice:
             )
         )
         self._received_end_position_info_event.set()
-        if self._is_connection_callback_disabled(MotionCallback.END_POSITION_INFO):
+        if self._is_connection_callback_disabled(
+            MotionCallback.END_POSITION_INFO
+        ):
             return
         for end_position_callback in self._end_position_callbacks:
             end_position_callback(self._end_position_info)
@@ -1017,7 +1065,9 @@ class MotionDevice:
             str(rssi),
         )
         self.rssi = rssi
-        if self._is_connection_callback_disabled(MotionCallback.SIGNAL_STRENGTH):
+        if self._is_connection_callback_disabled(
+            MotionCallback.SIGNAL_STRENGTH
+        ):
             return
         for signal_strength_callback in self._signal_strength_callbacks:
             signal_strength_callback(rssi)
@@ -1045,7 +1095,9 @@ class MotionDevice:
         """Register the callback used to update the position and tilt."""
         self._position_callbacks.append(callback)
 
-    def register_battery_callback(self, callback: Callable[[int], None]) -> None:
+    def register_battery_callback(
+        self, callback: Callable[[int], None]
+    ) -> None:
         """Register the callback used to update the battery percentage."""
         self._battery_callbacks.append(callback)
 
@@ -1092,7 +1144,9 @@ class MotionDevice:
         if callable(identifier):  # Remove by reference
             callback_list[:] = [cb for cb in callback_list if cb != identifier]
         elif isinstance(identifier, str):  # Remove by function name
-            callback_list[:] = [cb for cb in callback_list if cb.__name__ != identifier]
+            callback_list[:] = [
+                cb for cb in callback_list if cb.__name__ != identifier
+            ]
         else:
             raise ValueError("Identifier must be a callable or a string.")
 
@@ -1100,19 +1154,27 @@ class MotionDevice:
         """Remove a status callback."""
         self._generic_remove_callback(identifier, self._status_callbacks)
 
-    def remove_feedback_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_feedback_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a feedback callback."""
         self._generic_remove_callback(identifier, self._feedback_callbacks)
 
-    def remove_position_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_position_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a position callback."""
         self._generic_remove_callback(identifier, self._position_callbacks)
 
-    def remove_battery_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_battery_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a battery callback."""
         self._generic_remove_callback(identifier, self._battery_callbacks)
 
-    def remove_end_position_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_end_position_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove an end position info callback."""
         self._generic_remove_callback(identifier, self._end_position_callbacks)
 
@@ -1126,17 +1188,25 @@ class MotionDevice:
         """Remove a connection callback."""
         self._generic_remove_callback(identifier, self._connection_callbacks)
 
-    def remove_calibration_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_calibration_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a calibration callback."""
         self._generic_remove_callback(identifier, self._calibration_callbacks)
 
-    def remove_running_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_running_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a running callback."""
         self._generic_remove_callback(identifier, self._running_callbacks)
 
-    def remove_signal_strength_callback(self, identifier: Union[Callable, str]) -> None:
+    def remove_signal_strength_callback(
+        self, identifier: Union[Callable, str]
+    ) -> None:
         """Remove a signal strength callback."""
-        self._generic_remove_callback(identifier, self._signal_strength_callbacks)
+        self._generic_remove_callback(
+            identifier, self._signal_strength_callbacks
+        )
 
 
 class NoEndPositionsException(Exception):

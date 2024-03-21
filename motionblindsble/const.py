@@ -12,7 +12,8 @@ SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME = 2  # Seconds
 DISPLAY_NAME = "Motionblind {mac_code}"
 
 EXCEPTION_NO_END_POSITIONS = (
-    "{display_name}'s end positions need to be set" " before usage of this command."
+    "{display_name}'s end positions need to be set"
+    " before usage of this command."
 )
 EXCEPTION_NO_FAVORITE_POSITION = (
     "{display_name}'s favorite position needs"
