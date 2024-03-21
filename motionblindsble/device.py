@@ -640,7 +640,6 @@ class MotionDevice:
         if self._current_bleak_client is not None:
             _LOGGER.debug("(%s) Disconnecting", self.ble_device.address)
             await self._current_bleak_client.disconnect()
-            _LOGGER.debug("(%s) Disconnected", self.ble_device.address)
             self._current_bleak_client = None
         else:
             self.update_connection(MotionConnectionType.DISCONNECTED)
