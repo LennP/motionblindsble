@@ -186,6 +186,7 @@ def requires_favorite_position(func: Callable) -> Callable:
 class MotionEndPositions(IntEnum):
     """Information on how many end positions are set."""
 
+    UNKNOWN = -1
     NONE = 0
     ONE = 1
     BOTH = 2
@@ -198,14 +199,14 @@ class MotionEndPositions(IntEnum):
             0x0A: cls.ONE,
             0x0E: cls.BOTH,
         }
-        return mapping.get(hex_value, None)
+        return mapping.get(hex_value, cls.UNKNOWN)
 
 
 @dataclass
 class MotionPositionInfo:
     """Information on whether end positions and favorite position are set."""
 
-    end_positions: MotionEndPositions
+    end_positions: MotionEndPositions | None
     favorite_position: bool | None
 
     def __init__(
