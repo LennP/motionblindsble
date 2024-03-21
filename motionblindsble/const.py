@@ -12,8 +12,7 @@ SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME = 2  # Seconds
 DISPLAY_NAME = "Motionblind {mac_code}"
 
 EXCEPTION_NO_END_POSITIONS = (
-    "{display_name}'s end positions need to be set"
-    " before usage of this command."
+    "{display_name}'s end positions need to be set" " before usage of this command."
 )
 EXCEPTION_NO_FAVORITE_POSITION = (
     "{display_name}'s favorite position needs"
@@ -105,7 +104,7 @@ class MotionBlindType(Enum):
     ROMAN = "Roman blind"
     VENETIAN = "Venetian blind"
     VENETIAN_TILT_ONLY = "Venetian blind (tilt-only)"
-    DOUBLE_ROLLER = "Double Roller blind"
+    DOUBLE_ROLLER = "Double roller blind"
     CURTAIN = "Curtain blind"
     VERTICAL = "Vertical blind"
 
