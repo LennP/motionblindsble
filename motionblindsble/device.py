@@ -192,7 +192,7 @@ class MotionEndPositions(IntEnum):
     BOTH = 2
 
     @classmethod
-    def from_hex(cls, hex_value: int) -> MotionEndPositions | None:
+    def from_hex(cls, hex_value: int) -> MotionEndPositions:
         """Return the number of end positions set."""
         mapping = {
             0x02: cls.NONE,
@@ -206,7 +206,7 @@ class MotionEndPositions(IntEnum):
 class MotionPositionInfo:
     """Information on whether end positions and favorite position are set."""
 
-    end_positions: MotionEndPositions | None
+    end_positions: MotionEndPositions
     favorite_position: bool | None
 
     def __init__(
@@ -909,7 +909,7 @@ class MotionDevice:
             str(tilt),
             str(battery_percentage),
             speed_level.name if speed_level is not None else None,
-            end_position_info.end_positions,
+            end_position_info.end_positions.name,
             end_position_info.favorite_position,
         )
         self.update_position(position, tilt)
@@ -942,7 +942,7 @@ class MotionDevice:
             self.ble_device.address,
             str(position),
             str(tilt),
-            end_position_info.end_positions,
+            end_position_info.end_positions.name,
             end_position_info.favorite_position,
         )
         self.update_position(position, tilt)
@@ -1036,7 +1036,7 @@ class MotionDevice:
                 "favorite position set: %s"
             ),
             self.ble_device.address,
-            end_position_info.end_positions,
+            end_position_info.end_positions.name,
             end_position_info.favorite_position,
         )
         self._end_position_info = end_position_info
