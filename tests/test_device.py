@@ -625,14 +625,16 @@ class TestDevice:
                 + "00"
                 + "FFFF"
                 + "00"
-                + "60"
+                + "FF"
             ),
         )
         for status_callback in device._status_callbacks:
             status_callback.assert_called_once_with(
                 100,
                 180,
-                96,
+                100,
+                True,
+                True,
                 MotionSpeedLevel.MEDIUM,
                 device._end_position_info,
             )
@@ -659,12 +661,12 @@ class TestDevice:
                 + "00"
                 + "0000"
                 + "00"
-                + "0A"
+                + "8F"
             ),
         )
         for status_callback in device._status_callbacks:
             status_callback.assert_called_with(
-                0, 0, 10, MotionSpeedLevel.HIGH, device._end_position_info
+                0, 0, 15, True, False, MotionSpeedLevel.HIGH, device._end_position_info
             )
         assert device._end_position_info is not None
 
@@ -689,7 +691,7 @@ class TestDevice:
         )
         for status_callback in device._status_callbacks:
             status_callback.assert_called_with(
-                0, 0, 10, None, device._end_position_info
+                0, 0, 10, False, False, None, device._end_position_info
             )
 
     @patch("motionblindsble.device.MotionCrypt.encrypt", return_value="AA")
@@ -804,13 +806,17 @@ class TestDevice:
                     5,
                     5,
                     10,
+                    True,
+                    False,
                     MotionSpeedLevel.HIGH,
                     MotionPositionInfo(0x0E, 0xFFFF),
                 ],
                 [
                     "_position",
                     "_tilt",
-                    "_battery",
+                    "_battery_percentage",
+                    "_is_charging",
+                    "_is_wired",
                     "_speed",
                     "_end_position_info",
                 ],
@@ -868,8 +874,8 @@ class TestDevice:
                 device.remove_battery_callback,
                 MotionCallback.BATTERY,
                 device.update_battery,
-                [5],
-                ["_battery"],
+                [5, True, False],
+                ["_battery_percentage", "_is_charging", "_is_wired"],
             ),
             (
                 device.register_speed_callback,
