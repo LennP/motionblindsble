@@ -20,7 +20,7 @@ setup(
     author="LennP",
     author_email="lennperik@hotmail.nl",
     license="MIT",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests*"]),
     python_requires=">=3.9",
     install_requires=[
         "bleak",
