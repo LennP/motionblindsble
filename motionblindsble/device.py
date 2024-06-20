@@ -198,6 +198,7 @@ class MotionEndPositions(IntEnum):
             0x02: cls.NONE,
             0x0A: cls.ONE,
             0x0E: cls.BOTH,
+            0x4E: cls.BOTH,
         }
         return mapping.get(hex_value, cls.UNKNOWN)
 
