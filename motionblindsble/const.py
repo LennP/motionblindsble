@@ -1,4 +1,4 @@
-"""Constants for MotionBlinds BLE."""
+"""Constants for Motionblinds BLE."""
 
 from enum import Enum, IntEnum
 
@@ -21,7 +21,7 @@ EXCEPTION_NO_FAVORITE_POSITION = (
 )
 EXCEPTION_NOT_CALIBRATED = (
     "{display_name} needs to be calibrated using the"
-    " MotionBlinds BLE app before usage."
+    " Motionblinds BLE app before usage."
 )
 
 

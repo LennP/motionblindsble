@@ -1,4 +1,4 @@
-"""Device for MotionBlinds BLE."""
+"""Device for Motionblinds BLE."""
 
 from __future__ import annotations
 
@@ -287,7 +287,7 @@ class ConnectionQueue:
 
 
 class MotionDevice:
-    """Class used to control a MotionBlinds BLE device."""
+    """Class used to control a Motionblinds BLE device."""
 
     ble_device: BLEDevice
     blind_type: MotionBlindType

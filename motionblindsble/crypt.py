@@ -1,4 +1,4 @@
-"""Encryption for MotionBlinds BLE."""
+"""Encryption for Motionblinds BLE."""
 
 from __future__ import annotations
 
