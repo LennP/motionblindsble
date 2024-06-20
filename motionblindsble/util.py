@@ -1,4 +1,4 @@
-"""Util for MotionBlinds BLE."""
+"""Util for Motionblinds BLE."""
 
 import re
 

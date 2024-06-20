@@ -2,7 +2,7 @@
 
 # MotionBlinds BLE
 
-Python package used to interface with MotionBlinds motors using Bluetooth Low Energy (BLE).
+Python package used to interface with Motionblinds motors using Bluetooth Low Energy (BLE).
 
 # Installation
 
