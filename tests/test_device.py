@@ -7,7 +7,6 @@ from typing import Callable
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
-
 from motionblindsble.device import (
     SETTING_CALIBRATION_DISCONNECT_TIME,
     SETTING_DISCONNECT_TIME,
@@ -263,7 +262,7 @@ class TestDeviceConnection:
 
         # Test with normal disconnect timer
         device._disconnect_timer = Mock()
-        device.cancel_disconnect_timer()
+        device._cancel_disconnect_timer()
         device._disconnect_timer.assert_called_once()
 
     @patch(

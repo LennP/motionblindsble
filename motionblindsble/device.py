@@ -492,7 +492,38 @@ class MotionDevice:
         """Set the call_later function to use."""
         self._call_later = _call_later
 
-    def cancel_disconnect_timer(self) -> None:
+    def _create_disconnect_timer(self, timeout: float) -> None:
+        async def _disconnect_later(_: datetime | None = None):
+            if self._permanent_connection:
+                return
+            _LOGGER.debug(
+                "(%s) Disconnecting after %.2fs",
+                self.ble_device.address,
+                timeout,
+            )
+            await self.disconnect()
+
+        if self._call_later:
+            _LOGGER.debug(
+                "(%s) Refreshing disconnect timeout to %.2fs"
+                " using call_later",
+                self.ble_device.address,
+                timeout,
+            )
+            self._disconnect_timer = self._call_later(
+                delay=timeout, action=_disconnect_later
+            )  # type: ignore[call-arg]
+        else:
+            _LOGGER.debug(
+                "(%s) Refreshing disconnect timeout to %.2f",
+                self.ble_device.address,
+                timeout,
+            )
+            self._disconnect_timer = get_event_loop().call_later(
+                timeout, lambda: create_task(_disconnect_later())
+            )
+
+    def _cancel_disconnect_timer(self) -> None:
         """Cancel the disconnect timeout."""
         if self._disconnect_timer:
             # Cancel current timeout
@@ -524,38 +555,9 @@ class MotionDevice:
         ):
             return
 
-        self.cancel_disconnect_timer()
-
-        async def _disconnect_later(_: datetime | None = None):
-            if self._permanent_connection:
-                return
-            _LOGGER.debug(
-                "(%s) Disconnecting after %.2fs",
-                self.ble_device.address,
-                _timeout,
-            )
-            await self.disconnect()
-
         self._disconnect_time = new_disconnect_time
-        if self._call_later:
-            _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2fs"
-                " using call_later",
-                self.ble_device.address,
-                _timeout,
-            )
-            self._disconnect_timer = self._call_later(
-                delay=_timeout, action=_disconnect_later
-            )  # type: ignore[call-arg]
-        else:
-            _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2f",
-                self.ble_device.address,
-                _timeout,
-            )
-            self._disconnect_timer = get_event_loop().call_later(
-                _timeout, lambda: create_task(_disconnect_later())
-            )
+        self._cancel_disconnect_timer()
+        self._create_disconnect_timer(_timeout)
 
     def _notification_callback(
         self, _: BleakGATTCharacteristic, byte_array: bytearray
@@ -662,7 +664,7 @@ class MotionDevice:
     async def disconnect(self) -> None:
         """Disconnect from the device."""
         self.update_connection(MotionConnectionType.DISCONNECTING)
-        self.cancel_disconnect_timer()
+        self._cancel_disconnect_timer()
         if self._connection_queue.cancel():
             _LOGGER.debug("(%s) Cancelled connecting", self.ble_device.address)
         if self._current_bleak_client is not None:
