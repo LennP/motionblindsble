@@ -509,12 +509,11 @@ class MotionDevice:
         if self._permanent_connection:
             return
 
-        if timeout is not None:
-            _timeout: float = timeout
-        elif self._custom_setting_disconnect_time is not None:
-            _timeout = self._custom_setting_disconnect_time
-        else:
-            _timeout = SETTING_DISCONNECT_TIME
+        _timeout = (
+            timeout
+            or self._custom_setting_disconnect_time
+            or SETTING_DISCONNECT_TIME
+        )
         # Don't refresh if existing timeout > timeout unless forced
         new_disconnect_time = time_ns() // 1e6 + _timeout * 1e3
         if (
