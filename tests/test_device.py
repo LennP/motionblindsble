@@ -1,31 +1,32 @@
 """Tests for the device.py module."""
 
 import asyncio
-from asyncio import Event
 import fnmatch
-from unittest.mock import AsyncMock, Mock, call, patch
+from asyncio import Event
 from typing import Callable
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+
 from motionblindsble.device import (
+    SETTING_CALIBRATION_DISCONNECT_TIME,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
-    SETTING_CALIBRATION_DISCONNECT_TIME,
     BleakError,
     BleakNotFoundError,
     BleakOutOfConnectionSlotsError,
     BLEDevice,
     ConnectionQueue,
+    MotionBlindType,
+    MotionCalibrationType,
+    MotionCallback,
     MotionConnectionType,
     MotionDevice,
     MotionEndPositions,
     MotionNotificationType,
-    MotionRunningType,
-    MotionCalibrationType,
-    MotionCallback,
     MotionPositionInfo,
-    MotionBlindType,
+    MotionRunningType,
     MotionSpeedLevel,
     NoEndPositionsException,
     NoFavoritePositionException,
@@ -566,7 +567,7 @@ class TestDevice:
         device.register_feedback_callback(Mock())
         device.register_status_callback(Mock())
 
-        # Test FEEDBACK notification with end positions
+        # Test FEEDBACK notification without end positions
         device._notification_callback(
             None,
             bytearray.fromhex(
@@ -586,7 +587,7 @@ class TestDevice:
             and device._end_position_info.favorite_position is None
         )
 
-        # Test FEEDBACK notification without end positions
+        # Test FEEDBACK notification with end positions
         for feedback_callback in device._feedback_callbacks:
             feedback_callback.reset_mock()
         device._notification_callback(
@@ -616,7 +617,7 @@ class TestDevice:
             None,
             bytearray.fromhex(
                 MotionNotificationType.STATUS.value
-                + "0E"
+                + "4E"
                 + "00"
                 + "64"
                 + "B4"

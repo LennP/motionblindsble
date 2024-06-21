@@ -194,12 +194,12 @@ class MotionEndPositions(IntEnum):
     @classmethod
     def from_hex(cls, hex_value: int) -> MotionEndPositions:
         """Return the number of end positions set."""
-        mapping = {
-            0x02: cls.NONE,
-            0x0A: cls.ONE,
-            0x0E: cls.BOTH,
-        }
-        return mapping.get(hex_value, cls.UNKNOWN)
+        return {
+            0b001: cls.NONE,  # e.g. 0x02
+            0b011: cls.ONE,
+            0b101: cls.ONE,
+            0b111: cls.BOTH,  # e.g. 0x0E or 0x4E
+        }.get((hex_value & 0xF) >> 1, cls.UNKNOWN)
 
 
 @dataclass
