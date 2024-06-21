@@ -16,7 +16,7 @@ setup(
     ),
     long_description=README,
     long_description_content_type="text/markdown",
-    url="https://github.com/LennP/PyPi-Motionblinds_BLE",
+    url="https://github.com/LennP/motionblindsble",
     author="LennP",
     author_email="lennperik@hotmail.nl",
     license="MIT",
