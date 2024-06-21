@@ -667,7 +667,13 @@ class TestDevice:
         )
         for status_callback in device._status_callbacks:
             status_callback.assert_called_with(
-                0, 0, 15, True, False, MotionSpeedLevel.HIGH, device._end_position_info
+                0,
+                0,
+                15,
+                True,
+                False,
+                MotionSpeedLevel.HIGH,
+                device._end_position_info,
             )
         assert device._end_position_info is not None
 
