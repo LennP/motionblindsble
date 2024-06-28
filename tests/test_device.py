@@ -501,7 +501,6 @@ class TestDeviceConnection:
         permanent_connection_enabled = Event()
 
         async def call_once_condition_is_met(action: Callable) -> None:
-            print("Waiting for condition")
             await permanent_connection_enabled.wait()
             await action()
 
@@ -530,36 +529,88 @@ class TestDeviceConnection:
 
 
 class TestOptionPermanentConnection:
-    """Test the permanent connection option."""
+    """
+    Tests to ensure that the MotionDevice handles the permanent connection
+    option correctly. These tests verify that the device attempts to reconnect
+    as expected when the permanent connection feature is enabled, and does not
+    reconnect when it is disabled.
+    """
 
+    @pytest.mark.parametrize(
+        "setup_action",
+        [
+            (lambda device: device.set_disconnect_timer_after_still(True)),
+            (lambda device: device.set_disconnect_timer_after_still(False)),
+            (
+                lambda device: device.set_disconnect_timer_after_still(True)
+                and device.set_custom_disconnect_time(5)
+            ),
+            (
+                lambda device: device.set_disconnect_timer_after_still(False)
+                and device.set_custom_disconnect_time(5)
+            ),
+        ],
+    )
     @patch("motionblindsble.device.MotionDevice.connect")
     async def test_permanent_connection(
+        self, mock_connect: Mock, device: MotionDevice, setup_action
+    ) -> None:
+        """
+        Verifies that enabling the permanent connection triggers a reconnect
+        attempt after a disconnect, and no attempt is made when the permanent
+        connection is not enabled. The setup varies based on the disconnect
+        timer settings.
+        """
+        setup_action(device)
+
+        # Simulate a disconnect event without permanent connection enabled.
+        device._disconnect_callback(Mock())
+        assert (
+            mock_connect.call_count == 0
+        ), "No reconnect should happen without permanent connection."
+
+        # Enable permanent connection and check for connect attempt.
+        await device.set_permanent_connection(True)
+        assert (
+            mock_connect.call_count == 1
+        ), "Should attempt to connect after enabling permanent connection."
+
+        # Simulate another disconnect and verify reconnect attempt.
+        device._disconnect_callback(Mock())
+        assert (
+            mock_connect.call_count == 2
+        ), "Should attempt to reconnect after disconnect with permanent connection."
+
+    @patch("motionblindsble.device.MotionDevice.connect")
+    async def test_permanent_connection_ha(
         self, mock_connect: Mock, device: MotionDevice
     ) -> None:
-        """Test the permanent connection function."""
-        device._disconnect_callback(Mock())
-        assert mock_connect.call_count == 0
-
-        # Test normal permanent connection
-        await device.set_permanent_connection(True)
-        assert mock_connect.call_count == 1
-        device._disconnect_callback(Mock())
-        assert mock_connect.call_count == 2
-
-        # Test permanent connection with Home Assistant
+        """
+        Tests the permanent connection feature in an environment with
+        Home Assistant, ensuring that task creation is handled correctly.
+        """
+        # Setup for Home Assistant environment.
         mock_create_task = Mock()
         device.set_create_task_factory(mock_create_task)
-        await device.set_permanent_connection(True)
-        device._disconnect_callback(Mock())
-        assert mock_create_task.call_count == 1
 
-        # Test permanent connection, with set_disconnect_timer_after_still
-        # set_disconnect_timer_after_still should not affect it
-        device.set_disconnect_timer_after_still(True)
-        await device.set_permanent_connection(True)
-        assert mock_connect.call_count == 5
+        # Simulate a disconnect event without permanent connection enabled.
         device._disconnect_callback(Mock())
-        assert mock_connect.call_count == 6
+        assert (
+            mock_connect.call_count == 0
+        ), "No reconnect should happen without permanent connection."
+
+        # Enable permanent connection and check for reconnect attempts.
+        await device.set_permanent_connection(True)
+        assert (
+            mock_connect.call_count == 1
+        ), "Should connect after enabling permanent connection."
+        device._disconnect_callback(Mock())
+        assert (
+            mock_connect.call_count == 2
+        ), "Should reconnect after disconnect with permanent connection."
+        assert (
+            mock_create_task.call_count == 1
+        ), "Task creation should be handled once for Home Assistant."
 
 
 class TestOptionDisconnectTimerAfterStill:
@@ -770,10 +821,18 @@ class TestOptionDisconnectTimerAfterStill:
 
 
 class TestDevice:
-    """Test the Device in device.py module."""
+    """
+    Test suite for the Device class in the device.py module.
+    This test class covers various functionalities of the MotionDevice class,
+    including initialization, state management, command sending, and
+    notifications handling.
+    """
 
     def test_init(self) -> None:
-        """Test initializing a MotionDevice."""
+        """
+        Test the initialization of a MotionDevice with specified BLEDevice
+        instances.
+        """
         ble_device1 = BLEDevice(
             "00:11:22:33:44:55", "00:11:22:33:44:55", {}, rssi=0
         )
@@ -789,7 +848,10 @@ class TestDevice:
 
     @patch("motionblindsble.device.discover_device")
     async def test_init_discover(self, mock_discover_device: Mock) -> None:
-        """Test initializing a MotionDevice with discover function."""
+        """
+        Test initializing a MotionDevice using the discover function to
+        handle different scenarios.
+        """
         # Test no device found
         mock_discover_device.return_value = None
         device = await MotionDevice.discover("00:11:22:33:44:55")
@@ -806,7 +868,10 @@ class TestDevice:
         assert device.ble_device is ble_device
 
     def test_setters(self, device: MotionDevice) -> None:
-        """Test initializing a MotionDevice."""
+        """
+        Test the setter methods for task and callback delay factories in
+        MotionDevice.
+        """
         mock = Mock()
         mock2 = Mock()
         device.set_create_task_factory(mock)
@@ -816,7 +881,9 @@ class TestDevice:
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
     async def test_notification_callback(self, device: MotionDevice) -> None:
-        """Test the notification callback."""
+        """
+        Test the handling of various notifications by the MotionDevice.
+        """
         device.register_feedback_callback(Mock())
         device.register_status_callback(Mock())
 
@@ -965,7 +1032,9 @@ class TestDevice:
         mock_encrypt: Mock,
         device: MotionDevice,
     ) -> None:
-        """Test sending a command."""
+        """
+        Test sending of commands to the BLE device under various conditions.
+        """
 
         # Test sending command without BleakClient
         device._current_bleak_client = None
@@ -1007,7 +1076,10 @@ class TestDevice:
         AsyncMock(return_value=True),
     )
     async def test_commands(self, device: MotionDevice) -> None:
-        """Test sending different commands."""
+        """
+        Test the functionality of various commands provided by the
+        MotionDevice class.
+        """
         device.update_end_position_info(MotionPositionInfo(0x0E, 0xFFFF))
 
         call_counter = 0
@@ -1036,7 +1108,10 @@ class TestDevice:
             assert device._send_command.call_count == call_counter
 
     async def test_register_callbacks(self, device: MotionDevice) -> None:
-        """Test registering device callbacks."""
+        """
+        Test the registration of various callback functions to the
+        MotionDevice.
+        """
 
         register_callbacks = []
         for attr_name in dir(device):

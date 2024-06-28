@@ -667,7 +667,6 @@ class MotionDevice:
 
         Return whether or not the motor is ready for a command.
         """
-        print("Entering connect")
         if not self.is_connected():
             # Connect if not connected yet and not busy connecting
             self._disable_connection_callbacks(
