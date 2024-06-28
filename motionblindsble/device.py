@@ -460,21 +460,28 @@ class MotionDevice:
 
     def set_custom_disconnect_time(self, timeout: float | None):
         """Set a custom disconnect time."""
-        _LOGGER.debug(
-            (
-                "(%s) Set custom disconnect time to %.2fs"
-                if timeout is not None
-                else "(%s) Set custom disconnect time to %s"
-            ),
-            self.ble_device.address,
-            timeout,
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                (
+                    "(%s) Set custom disconnect time to %.2fs"
+                    if timeout is not None
+                    else "(%s) Set custom disconnect time to %s"
+                ),
+                self.ble_device.address,
+                timeout,
+            )
         self._custom_setting_disconnect_time = timeout
 
     async def set_permanent_connection(
         self, permanent_connection: bool
     ) -> None:
         """Enable or disable a permanent connection."""
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) %s permanent connection",
+                self.ble_device.address,
+                "Enabling" if permanent_connection else "Disabling",
+            )
         self._permanent_connection = permanent_connection
         if permanent_connection:
             await self.connect()
@@ -486,6 +493,12 @@ class MotionDevice:
     ) -> None:
         """Enable starting a disconnect timer only when the
         blind has reached is position (is not moving anymore)."""
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) %s disconnect timer after still",
+                self.ble_device.address,
+                "Enabling" if disconnect_timer_after_still else "Disabling",
+            )
         self._disconnect_timer_after_still = disconnect_timer_after_still
 
     @property
