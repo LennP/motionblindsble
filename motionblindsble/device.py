@@ -385,8 +385,10 @@ class MotionDevice:
             self.ble_device = device
         else:
             _LOGGER.warning(
-                "(%s) Could not find BLEDevice,"
-                " creating new BLEDevice from address",
+                (
+                    "(%s) Could not find BLEDevice,"
+                    " creating new BLEDevice from address"
+                ),
                 device,
             )
             self.ble_device = BLEDevice(
@@ -969,26 +971,27 @@ class MotionDevice:
     ) -> None:
         """Update the status (position, tilt, battery percentage, speed level,
         end position info)."""
-        _LOGGER.debug(
-            (
-                "(%s) Received status; position: %s, tilt: %s, "
-                "battery percentage: %s, is charging: %s, is wired: %s, "
-                "speed: %s, end positions: %s, favorite position set: %s"
-            ),
-            self.ble_device.address,
-            str(position),
-            str(tilt),
-            str(battery_percentage),
-            is_charging,
-            is_wired,
-            speed_level.name if speed_level is not None else None,
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                (
+                    "(%s) Received status; position: %s, tilt: %s, "
+                    "battery percentage: %s, is charging: %s, is wired: %s, "
+                    "speed: %s, end positions: %s, favorite position set: %s"
+                ),
+                self.ble_device.address,
+                position,
+                tilt,
+                battery_percentage,
+                is_charging,
+                is_wired,
+                speed_level.name if speed_level is not None else None,
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None,
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None,
+            )
         self.update_position(position, tilt)
         self.update_battery(battery_percentage, is_charging, is_wired)
         self.update_speed(speed_level)
@@ -1013,21 +1016,22 @@ class MotionDevice:
         end_position_info: MotionPositionInfo | None,
     ) -> None:
         """Update the feedback (postion, tilt, end position info)."""
-        _LOGGER.debug(
-            (
-                "(%s) Received feedback; position: %s, tilt: %s, "
-                "end positions: %s, favorite position set: %s "
-            ),
-            self.ble_device.address,
-            str(position),
-            str(tilt),
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                (
+                    "(%s) Received feedback; position: %s, tilt: %s, "
+                    "end positions: %s, favorite position set: %s "
+                ),
+                self.ble_device.address,
+                position,
+                tilt,
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None,
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None,
+            )
         self.update_position(position, tilt)
         self.update_end_position_info(end_position_info)
         self.update_running(MotionRunningType.STILL)
@@ -1057,11 +1061,12 @@ class MotionDevice:
         self, calibration_type: MotionCalibrationType | None
     ) -> None:
         """Update the calibration to a particular calibration type."""
-        _LOGGER.debug(
-            "(%s) Updating calibration: %s",
-            self.ble_device.address,
-            (calibration_type.value if calibration_type is not None else None),
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) Updating calibration: %s",
+                self.ble_device.address,
+                (calibration_type.value if calibration_type is not None else None),
+            )
         self._calibration_type = calibration_type
         if self._is_connection_callback_disabled(MotionCallback.CALIBRATION):
             return
@@ -1070,11 +1075,12 @@ class MotionDevice:
 
     def update_running(self, running_type: MotionRunningType | None) -> None:
         """Update the running to a particular running type."""
-        _LOGGER.debug(
-            "(%s) Updating running: %s",
-            self.ble_device.address,
-            (running_type.value if running_type is not None else None),
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) Updating running: %s",
+                self.ble_device.address,
+                (running_type.value if running_type is not None else None),
+            )
         self._running_type = running_type
         # If disconnect_timer_after_still enabled and no permanent connection
         if (
@@ -1128,11 +1134,12 @@ class MotionDevice:
 
     def update_speed(self, speed_level: MotionSpeedLevel | None) -> None:
         """Update the speed to a particular speed level."""
-        _LOGGER.debug(
-            "(%s) Updating speed: %s",
-            self.ble_device.address,
-            speed_level.name if speed_level is not None else None,
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) Updating speed: %s",
+                self.ble_device.address,
+                speed_level.name if speed_level is not None else None,
+            )
         self._speed = speed_level
         if self._is_connection_callback_disabled(MotionCallback.SPEED):
             return
@@ -1143,19 +1150,20 @@ class MotionDevice:
         self, end_position_info: MotionPositionInfo | None
     ) -> None:
         """Update the end_position_info."""
-        _LOGGER.debug(
-            (
-                "(%s) Updating end position info; end positions: %s, "
-                "favorite position set: %s"
-            ),
-            self.ble_device.address,
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                (
+                    "(%s) Updating end position info; end positions: %s, "
+                    "favorite position set: %s"
+                ),
+                self.ble_device.address,
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None,
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None,
+            )
         self._end_position_info = end_position_info
         self.update_calibration(
             None
@@ -1179,8 +1187,8 @@ class MotionDevice:
         _LOGGER.debug(
             "(%s) Updating position: %s, tilt: %s",
             self.ble_device.address,
-            str(position),
-            str(tilt),
+            position,
+            tilt,
         )
         self._position = position
         self._tilt = tilt
@@ -1194,7 +1202,7 @@ class MotionDevice:
         _LOGGER.debug(
             "(%s) Updating signal strength: %s",
             self.ble_device.address,
-            str(rssi),
+            rssi,
         )
         self.rssi = rssi
         if self._is_connection_callback_disabled(
