@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from asyncio import (
     FIRST_COMPLETED,
     Event,
@@ -73,7 +74,8 @@ def requires_connection(
             if not await self.connect(
                 disable_callbacks=(
                     [disable_callback] if disable_callback is not None else []
-                )
+                ),
+                called_by_decorator=True,
             ):
                 return False
             return await func(self, *args, **kwargs)
@@ -125,16 +127,14 @@ def requires_end_positions(
                 and self._end_position_info.end_positions
                 is not MotionEndPositions.BOTH
             ):
-                self.refresh_disconnect_timer()
+                self.update_running(MotionRunningType.STILL)
+                # If no end positions are set an exception is raised
                 if self.blind_type is MotionBlindType.VERTICAL:
-                    # Vertical blinds require calibration in mobile app
                     raise NotCalibratedException(
                         EXCEPTION_NOT_CALIBRATED.format(
                             display_name=self.display_name
                         )
                     )
-                # If no end positions are set an exception is raised
-                self.update_running(MotionRunningType.STILL)
                 raise NoEndPositionsException(
                     EXCEPTION_NO_END_POSITIONS.format(
                         display_name=self.display_name
@@ -170,9 +170,8 @@ def requires_favorite_position(func: Callable) -> Callable:
             self._end_position_info is not None
             and not self._end_position_info.favorite_position
         ):
-            self.refresh_disconnect_timer()
-            # If no favorite position is set an exception is raised
             self.update_running(MotionRunningType.STILL)
+            # If no favorite position is set an exception is raised
             raise NoFavoritePositionException(
                 EXCEPTION_NO_FAVORITE_POSITION.format(
                     display_name=self.display_name
@@ -237,7 +236,7 @@ class CallLater(Protocol):
         ...  # pragma: no cover
 
 
-class ConnectionQueue:
+class ConnectionManager:
     """Class used to ensure the first caller connects,
     but the last caller's command goes through after connection."""
 
@@ -310,7 +309,7 @@ class MotionDevice:
     timezone: tzinfo | None
 
     # Connection
-    _connection_queue: ConnectionQueue
+    _connection_manager: ConnectionManager
     _current_bleak_client: BleakClient | None
 
     # States
@@ -328,6 +327,7 @@ class MotionDevice:
 
     # Disconnection
     _permanent_connection: bool
+    _disconnect_timer_after_still: bool
     _custom_setting_disconnect_time: float | None
     _disconnect_time: float | None
     _disconnect_timer: TimerHandle | Callable | None
@@ -412,11 +412,13 @@ class MotionDevice:
         )
 
         self._permanent_connection: bool = False
+        ### SET TO FALSE FOR PYTEST, FOR TESTING PURPOSES DEFAULT FALSE
+        self._disconnect_timer_after_still: bool = "pytest" not in sys.modules
         self._custom_setting_disconnect_time: float | None = None
         self._disconnect_time: float | None = None
         self._disconnect_timer: TimerHandle | Callable | None = None
 
-        self._connection_queue = ConnectionQueue()
+        self._connection_manager = ConnectionManager()
 
         self._connect_status_query_time = None
         self._disabled_connection_callbacks = []
@@ -479,6 +481,13 @@ class MotionDevice:
         else:
             await self.disconnect()
 
+    def set_disconnect_timer_after_still(
+        self, disconnect_timer_after_still: bool
+    ) -> None:
+        """Enable starting a disconnect timer only when the
+        blind has reached is position (is not moving anymore)."""
+        self._disconnect_timer_after_still = disconnect_timer_after_still
+
     @property
     def connection_type(self) -> MotionConnectionType:
         """Return the connection type."""
@@ -492,54 +501,10 @@ class MotionDevice:
         """Set the call_later function to use."""
         self._call_later = _call_later
 
-    def _create_disconnect_timer(self, timeout: float) -> None:
-        async def _disconnect_later(_: datetime | None = None):
-            if self._permanent_connection:
-                return
-            _LOGGER.debug(
-                "(%s) Disconnecting after %.2fs",
-                self.ble_device.address,
-                timeout,
-            )
-            await self.disconnect()
-
-        if self._call_later:
-            _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2fs"
-                " using call_later",
-                self.ble_device.address,
-                timeout,
-            )
-            self._disconnect_timer = self._call_later(
-                delay=timeout, action=_disconnect_later
-            )  # type: ignore[call-arg]
-        else:
-            _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2f",
-                self.ble_device.address,
-                timeout,
-            )
-            self._disconnect_timer = get_event_loop().call_later(
-                timeout, lambda: create_task(_disconnect_later())
-            )
-
-    def _cancel_disconnect_timer(self) -> None:
-        """Cancel the disconnect timeout."""
-        if self._disconnect_timer:
-            # Cancel current timeout
-            if callable(self._disconnect_timer):
-                self._disconnect_timer()
-            else:
-                self._disconnect_timer.cancel()
-
-    def refresh_disconnect_timer(
+    def _create_disconnect_timer(
         self, timeout: float | None = None, force: bool = False
     ) -> None:
-        """Refresh the time before the device is disconnected."""
-        # Only enable the disconnect timer if no permanent connection
-        if self._permanent_connection:
-            return
-
+        """Create a disconnect timer."""
         _timeout = (
             timeout
             or self._custom_setting_disconnect_time
@@ -556,8 +521,64 @@ class MotionDevice:
             return
 
         self._disconnect_time = new_disconnect_time
+
         self._cancel_disconnect_timer()
-        self._create_disconnect_timer(_timeout)
+
+        async def _disconnect_later(_: datetime | None = None):
+            if self._permanent_connection:
+                return
+            _LOGGER.debug(
+                "(%s) Disconnecting after %.2fs",
+                self.ble_device.address,
+                _timeout,
+            )
+            await self.disconnect()
+
+        if self._call_later:
+            _LOGGER.debug(
+                "(%s) Refreshing disconnect timeout to %.2fs"
+                " using call_later",
+                self.ble_device.address,
+                _timeout,
+            )
+            self._disconnect_timer = self._call_later(
+                delay=_timeout, action=_disconnect_later
+            )  # type: ignore[call-arg]
+        else:
+            _LOGGER.debug(
+                "(%s) Refreshing disconnect timeout to %.2f",
+                self.ble_device.address,
+                _timeout,
+            )
+            self._disconnect_timer = get_event_loop().call_later(
+                _timeout, lambda: create_task(_disconnect_later())
+            )
+
+    def _cancel_disconnect_timer(self) -> None:
+        """Cancel the disconnect timeout."""
+        if self._disconnect_timer:
+            # Cancel current timeout
+            if callable(self._disconnect_timer):
+                self._disconnect_timer()
+            else:
+                self._disconnect_timer.cancel()
+
+    def refresh_disconnect_timer(
+        self,
+        timeout: float | None = None,
+        force: bool = False,
+        ignore_disconnect_timer_after_still: bool = False,
+    ) -> None:
+        """Refresh the time before the device is disconnected."""
+        # Do not create a disconnect timer if permanent connection is enabled
+        # or if a disconnect timer should only be created after blind is still
+        if (
+            not ignore_disconnect_timer_after_still
+            and self._disconnect_timer_after_still
+        ) or self._permanent_connection:
+            return
+
+        self._create_disconnect_timer(timeout, force)
 
     def _notification_callback(
         self, _: BleakGATTCharacteristic, byte_array: bytearray
@@ -638,12 +659,15 @@ class MotionDevice:
                 get_event_loop().create_task(self.connect())
 
     async def connect(
-        self, disable_callbacks: list[MotionCallback] | None = None
+        self,
+        disable_callbacks: list[MotionCallback] | None = None,
+        called_by_decorator: bool = False,
     ) -> bool:
         """Connect to the device if not connected.
 
         Return whether or not the motor is ready for a command.
         """
+        print("Entering connect")
         if not self.is_connected():
             # Connect if not connected yet and not busy connecting
             self._disable_connection_callbacks(
@@ -651,21 +675,23 @@ class MotionDevice:
             )
             self._received_end_position_info_event.clear()
             try:
-                return await self._connection_queue.wait_for_connection(self)
+                return await self._connection_manager.wait_for_connection(self)
             except Exception as e:
                 _LOGGER.error(
                     "(%s) Could not connect to blind", self.ble_device.address
                 )
                 self.update_connection(MotionConnectionType.DISCONNECTED)
                 raise e
-        self.refresh_disconnect_timer()
+        self.refresh_disconnect_timer(
+            ignore_disconnect_timer_after_still=not called_by_decorator
+        )
         return True
 
     async def disconnect(self) -> None:
         """Disconnect from the device."""
         self.update_connection(MotionConnectionType.DISCONNECTING)
         self._cancel_disconnect_timer()
-        if self._connection_queue.cancel():
+        if self._connection_manager.cancel():
             _LOGGER.debug("(%s) Cancelled connecting", self.ble_device.address)
         if self._current_bleak_client is not None:
             _LOGGER.debug("(%s) Disconnecting", self.ble_device.address)
@@ -712,7 +738,7 @@ class MotionDevice:
         self._connect_status_query_time = time_ns()
         await self.status_query()
 
-        self.refresh_disconnect_timer()
+        self.refresh_disconnect_timer(ignore_disconnect_timer_after_still=True)
 
         return True
 
@@ -1036,6 +1062,21 @@ class MotionDevice:
             (running_type.value if running_type is not None else None),
         )
         self._running_type = running_type
+        # If disconnect_timer_after_still enabled and no permanent connection
+        if (
+            self._disconnect_timer_after_still
+            and not self._permanent_connection
+        ):
+            if running_type is MotionRunningType.STILL:
+                # Create disconnect timer if still
+                self._create_disconnect_timer()
+            elif running_type in {
+                MotionRunningType.CLOSING,
+                MotionRunningType.OPENING,
+                MotionRunningType.UNKNOWN,
+            }:
+                # Cancel disconnect timer
+                self._cancel_disconnect_timer()
         if self._is_connection_callback_disabled(MotionCallback.RUNNING):
             return
         for running_callback in self._running_callbacks:

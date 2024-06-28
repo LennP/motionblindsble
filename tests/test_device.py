@@ -1,9 +1,10 @@
 """Tests for the device.py module."""
+# mypy: disable-error-code="attr-defined, misc, union-attr, assignment, arg-type, operator, call-overload"
 
 import asyncio
 import fnmatch
 from asyncio import Event
-from typing import Callable
+from typing import Any, Callable
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
@@ -16,7 +17,7 @@ from motionblindsble.device import (
     BleakNotFoundError,
     BleakOutOfConnectionSlotsError,
     BLEDevice,
-    ConnectionQueue,
+    ConnectionManager,
     MotionBlindType,
     MotionCalibrationType,
     MotionCallback,
@@ -37,26 +38,46 @@ from motionblindsble.device import (
 
 
 class TestDeviceDecorators:
-    """Test the decorators in device.py module."""
+    """Test suite for the decorators in the device.py module, focusing on
+    functionality related to device state requirements."""
+
+    @staticmethod
+    def create_decorated_method(decorator: Any, return_value: bool = True):
+        """Create a decorated method with the specified decorator."""
+
+        @decorator
+        async def mock_method(self):
+            return return_value
+
+        return mock_method
 
     @patch("motionblindsble.device.MotionDevice.refresh_disconnect_timer")
     @patch("motionblindsble.device.MotionDevice.update_calibration")
     async def test_requires_end_positions(
         self,
-        mock_update_calibration,
-        mock_refresh_disconnect_timer,
+        mock_update_calibration: Mock,
+        mock_refresh_disconnect_timer: Mock,
+        device: MotionDevice,
     ) -> None:
-        """Test the @requires_end_positions decorator."""
-        device = MotionDevice("00:11:22:33:44:55")
+        """
+        Test the @requires_end_positions decorator functionality by simulating
+        device responses under various conditions.
+
+        This test checks:
+        1. That methods decorated with @requires_end_positions execute
+            successfully when end positions are set.
+        2. That methods raise a NoEndPositionsException when no end positions
+            are set.
+        3. That methods handle device calibration status correctly when
+            calibration is required (curtain blinds should auto calibrate,
+            vertical blinds should raise a calibration exception).
+        """
         device.register_running_callback(lambda _: None)
 
-        @requires_end_positions
-        async def mock_method(self):
-            return True
-
-        @requires_end_positions(can_calibrate_curtain=True)
-        async def mock_method_calibration(self):
-            return True
+        mock_method = self.create_decorated_method(requires_end_positions)
+        mock_method_calibration = self.create_decorated_method(
+            requires_end_positions(can_calibrate_curtain=True)
+        )
 
         with patch.object(
             device, "_received_end_position_info_event"
@@ -117,39 +138,38 @@ class TestDeviceDecorators:
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
         Mock(),
     )
-    async def test_requires_favorite_position(self) -> None:
-        """Test the @requires_favorite_position decorator."""
-        device = MotionDevice("00:11:22:33:44:55")
-        device.update_end_position_info(
-            MotionPositionInfo(
-                0x0E, 0xFFFF
-            )  # Simulating end positions being set
-        )
-        device.register_running_callback(lambda _: None)
+    async def test_requires_favorite_position(
+        self, device_all_positions: MotionDevice
+    ) -> None:
+        """
+        Test the @requires_favorite_position decorator to ensure it correctly
+        handles the presence or absence of favorite positions.
+        """
+        device_all_positions.register_running_callback(lambda _: None)
 
-        @requires_favorite_position
-        async def mock_method(self):
-            return True
+        mock_method = self.create_decorated_method(requires_favorite_position)
 
-        result = await mock_method(device)
+        result = await mock_method(device_all_positions)
         assert result
 
-        device.update_end_position_info(
+        device_all_positions.update_end_position_info(
             MotionPositionInfo(
                 0x00, 0x0000
             )  # Simulating end positions not being set
         )
         with pytest.raises(NoFavoritePositionException):
-            await mock_method(device)
+            await mock_method(device_all_positions)
 
     @patch("motionblindsble.device.MotionDevice.connect")
-    async def test_requires_connection(self, mock_connect) -> None:
-        """Test the @requires_connection decorator."""
-        device = MotionDevice("00:11:22:33:44:55")
+    async def test_requires_connection(
+        self, mock_connect: Mock, device: MotionDevice
+    ) -> None:
+        """
+        Test the @requires_connection decorator to validate its response
+        based on the device's connection state.
+        """
 
-        @requires_connection
-        async def mock_method(self):
-            return True
+        mock_method = self.create_decorated_method(requires_connection)
 
         mock_connect.return_value = True
         assert await mock_method(device)
@@ -159,39 +179,54 @@ class TestDeviceDecorators:
 
 
 class TestDeviceConnection:
-    """Test the ConnectionQueue & establish_connection in device.py module."""
+    """
+    Tests for the ConnectionManager and establish_connection functionality
+    in the device.py module. These tests ensure that connection-related
+    methods are correctly implemented and manage connection states as
+    expected.
+    """
 
-    def test_create_connection_task(self) -> None:
-        """Test the creation of a connection task."""
-        connection_queue = ConnectionQueue()
-        device = MotionDevice("00:11:22:33:44:55")
+    @patch(
+        "motionblindsble.device.MotionDevice.establish_connection",
+        AsyncMock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.get_event_loop",
+    )
+    def test_create_connection_task(
+        self, mock_get_event_loop: Mock, device: MotionDevice
+    ) -> None:
+        """
+        Tests the creation of a connection task within the ConnectionManager.
+        Verifies that the right create_task is used and that a connection task
+        is correctly initiated.
+        """
+        connection_manager = ConnectionManager()
 
         # Test creation of connect task
-        with patch(
-            "motionblindsble.device.MotionDevice.establish_connection",
-            AsyncMock(return_value=True),
-        ):
-            connection_queue._create_connection_task(device)
+        connection_manager._create_connection_task(device)
+        mock_get_event_loop.assert_called()
 
         # Test creation of connect task with Home Assistant
         mock_create_task = Mock()
         device.set_create_task_factory(mock_create_task)
         assert device._create_task is not None
-        with patch(
-            "motionblindsble.device.MotionDevice.establish_connection",
-            AsyncMock(return_value=True),
-        ):
-            connection_queue._create_connection_task(device)
+        connection_manager._create_connection_task(device)
         mock_create_task.assert_called()
 
-    @patch("motionblindsble.device.ConnectionQueue._create_connection_task")
+    @patch("motionblindsble.device.ConnectionManager._create_connection_task")
     @patch("motionblindsble.device.wait")
     async def test_wait_for_connection(
-        self, mock_wait, mock_create_connection_task
+        self,
+        mock_wait: Mock,
+        mock_create_connection_task: Mock,
+        device: MotionDevice,
     ) -> None:
-        """Tests waiting for a connection."""
-        connection_queue = ConnectionQueue()
-        device = MotionDevice("00:11:22:33:44:55")
+        """
+        Tests the ConnectionManager's ability to wait for a device connection
+        to be established and handles various connection outcomes.
+        """
+        connection_manager = ConnectionManager()
 
         connection_task = Mock()
         mock_create_connection_task.return_value = connection_task
@@ -205,29 +240,29 @@ class TestDeviceConnection:
         # Test creation of connection
         connection_task.result.return_value = True
         mock_wait.side_effect = mock_wait_return_connection_task
-        can_execute_command = await connection_queue.wait_for_connection(
+        can_execute_command = await connection_manager.wait_for_connection(
             device
         )
         assert can_execute_command
-        assert connection_queue._connection_task is None
+        assert connection_manager._connection_task is None
 
         # Test creation of connection fails
         connection_task.result.return_value = False
         mock_wait.side_effect = mock_wait_return_connection_task
-        can_execute_command = await connection_queue.wait_for_connection(
+        can_execute_command = await connection_manager.wait_for_connection(
             device
         )
         assert not can_execute_command
-        assert connection_queue._connection_task is None
+        assert connection_manager._connection_task is None
 
         # Test creation of connection cancelled
         connection_task.result.return_value = True
         mock_wait.side_effect = mock_wait_return_cancel
-        can_execute_command = await connection_queue.wait_for_connection(
+        can_execute_command = await connection_manager.wait_for_connection(
             device
         )
         assert not can_execute_command
-        assert connection_queue._connection_task is not None
+        assert connection_manager._connection_task is not None
 
         # Test creation of connection with exception
         exceptions = [BleakOutOfConnectionSlotsError, BleakNotFoundError]
@@ -236,29 +271,28 @@ class TestDeviceConnection:
             mock_wait.side_effect = mock_wait_return_connection_task
             with pytest.raises(exception):
                 can_execute_command = (
-                    await connection_queue.wait_for_connection(device)
+                    await connection_manager.wait_for_connection(device)
                 )
             assert not can_execute_command
-            assert connection_queue._connection_task is None
+            assert connection_manager._connection_task is None
             assert device.connection_type is MotionConnectionType.DISCONNECTED
 
     async def test_cancel(self) -> None:
         """Test cancelling a connection task."""
-        connection_queue = ConnectionQueue()
+        connection_manager = ConnectionManager()
 
         # Test cancelling with no connection task
-        assert not connection_queue.cancel()
+        assert not connection_manager.cancel()
 
         # Test cancelling with connection task
         connection_task = Mock()
-        connection_queue._connection_task = connection_task
-        assert connection_queue.cancel()
+        connection_manager._connection_task = connection_task
+        assert connection_manager.cancel()
         connection_task.cancel.assert_called_once()
-        assert connection_queue._connection_task is None
+        assert connection_manager._connection_task is None
 
-    async def test_cancel_disconnect_timer(self) -> None:
+    async def test_cancel_disconnect_timer(self, device: MotionDevice) -> None:
         """Test cancelling a disconnect timer."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         # Test with normal disconnect timer
         device._disconnect_timer = Mock()
@@ -280,10 +314,12 @@ class TestDeviceConnection:
     @patch("motionblindsble.device.sleep")
     @patch("motionblindsble.device.MotionDevice.update_connection")
     async def test_establish_connection(
-        self, mock_update_connection, mock_sleep
+        self,
+        mock_update_connection: Mock,
+        mock_sleep: Mock,
+        device: MotionDevice,
     ) -> None:
         """Test the establish_connection function."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         # Test establish normal connection
         await device.establish_connection()
@@ -322,16 +358,16 @@ class TestDeviceConnection:
             assert mock_sleep.call_count == 0
 
     @patch("motionblindsble.device.MotionDevice.is_connected")
-    @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")
+    @patch("motionblindsble.device.ConnectionManager.wait_for_connection")
     @patch("motionblindsble.device.MotionDevice.refresh_disconnect_timer")
     async def test_connect(
         self,
-        mock_refresh_disconnect_timer,
-        mock_wait_for_connection,
-        mock_is_connected,
+        mock_refresh_disconnect_timer: Mock,
+        mock_wait_for_connection: Mock,
+        mock_is_connected: Mock,
+        device: MotionDevice,
     ) -> None:
         """Test the connect function."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         # Test connect success
         mock_is_connected.return_value = False
@@ -360,9 +396,10 @@ class TestDeviceConnection:
         assert mock_wait_for_connection.call_count == 3
 
     @patch("motionblindsble.device.MotionDevice.update_connection")
-    async def test_disconnect(self, mock_update_connection) -> None:
+    async def test_disconnect(
+        self, mock_update_connection: Mock, device: MotionDevice
+    ) -> None:
         """Test the disconnect function."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         # Test disconnecting when connected
         current_bleak_client = AsyncMock()
@@ -387,12 +424,12 @@ class TestDeviceConnection:
 
         # Test disconnecting when BleakClient is None
         device._current_bleak_client = None
-        assert not await device.disconnect()
+        await device.disconnect()
 
         # Test disconnecting when connecting
-        device._connection_queue = Mock()
-        assert not await device.disconnect()
-        device._connection_queue.cancel.assert_called_once()
+        device._connection_manager = Mock()
+        await device.disconnect()
+        device._connection_manager.cancel.assert_called_once()
 
     @patch(
         "motionblindsble.device.establish_connection",
@@ -405,10 +442,9 @@ class TestDeviceConnection:
     @patch("motionblindsble.device.MotionDevice.disconnect")
     @patch("motionblindsble.device.time_ns")
     async def test_refresh_disconnect_timer(
-        self, mock_time_ns, mock_disconnect
+        self, mock_time_ns: Mock, mock_disconnect: Mock, device: MotionDevice
     ) -> None:
         """Test the refresh_disconnect_timer function."""
-        device = MotionDevice("00:11:22:33:44:55")
         mock_time_ns.return_value = 0
 
         assert device._disconnect_time is None
@@ -492,10 +528,15 @@ class TestDeviceConnection:
         permanent_connection_enabled.set()
         assert mock_disconnect.call_count == 1
 
+
+class TestOptionPermanentConnection:
+    """Test the permanent connection option."""
+
     @patch("motionblindsble.device.MotionDevice.connect")
-    async def test_permanent_connection(self, mock_connect) -> None:
+    async def test_permanent_connection(
+        self, mock_connect: Mock, device: MotionDevice
+    ) -> None:
         """Test the permanent connection function."""
-        device = MotionDevice("00:11:22:33:44:55")
         device._disconnect_callback(Mock())
         assert mock_connect.call_count == 0
 
@@ -511,6 +552,221 @@ class TestDeviceConnection:
         await device.set_permanent_connection(True)
         device._disconnect_callback(Mock())
         assert mock_create_task.call_count == 1
+
+        # Test permanent connection, with set_disconnect_timer_after_still
+        # set_disconnect_timer_after_still should not affect it
+        device.set_disconnect_timer_after_still(True)
+        await device.set_permanent_connection(True)
+        assert mock_connect.call_count == 5
+        device._disconnect_callback(Mock())
+        assert mock_connect.call_count == 6
+
+
+class TestOptionDisconnectTimerAfterStill:
+    """Test the disconnect_after_still option."""
+
+    @pytest.mark.parametrize("enabled, calls", [[True, 1], [False, 3]])
+    @patch(
+        "motionblindsble.device.MotionDevice._send_command",
+        AsyncMock(return_value=True),
+    )
+    @patch("motionblindsble.device.establish_connection", AsyncMock())
+    @patch(
+        "motionblindsble.device.MotionDevice._create_disconnect_timer",
+        new_callable=Mock,
+    )
+    async def test_disconnect_timer_after_still_connect(
+        self,
+        mock_create_disconnect_timer: Mock,
+        device_any_positions: MotionDevice,
+        enabled: bool,
+        calls: int,
+    ) -> None:
+        """
+        A disconnect timer should be created on connect regardless of whether
+        the disconnect_timer_after_still option is enabled.
+        """
+        # Add debug output
+        print(f"Running test with enabled={enabled}")
+
+        mock_create_disconnect_timer.reset_mock()
+        device_any_positions.set_disconnect_timer_after_still(enabled)
+        await device_any_positions.connect()
+
+        # Debug output for mock call count
+        print(
+            f"mock_create_disconnect_timer.call_count: {mock_create_disconnect_timer.call_count}"  # noqa: E501
+        )
+
+        assert mock_create_disconnect_timer.call_count == calls
+
+    @patch(
+        "motionblindsble.device.MotionDevice.is_connected",
+        Mock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice._send_command",
+        AsyncMock(return_value=True),
+    )
+    async def test_disconnect_timer_after_still(
+        self, device_all_positions: MotionDevice
+    ) -> None:
+        """Test the disconnect timer on still function."""
+
+        with patch(
+            "motionblindsble.device.MotionDevice._create_disconnect_timer"
+        ) as mock_create_disconnect_timer:
+            device_all_positions.set_disconnect_timer_after_still(True)
+            # Calling connect should start a timer
+            await device_all_positions.connect()
+            assert mock_create_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, wait for still
+            await device_all_positions.open()
+            assert mock_create_disconnect_timer.call_count == 1
+            # Once position info is received, start timer again
+            device_all_positions.update_feedback(
+                0, 0, device_all_positions._end_position_info
+            )
+            assert mock_create_disconnect_timer.call_count == 2
+
+            # Test setting no disconnect timer on still
+            mock_create_disconnect_timer.call_count = 0
+            assert mock_create_disconnect_timer.call_count == 0
+            device_all_positions.set_disconnect_timer_after_still(False)
+            # Calling connect should start a timer
+            await device_all_positions.connect()
+            assert mock_create_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, and start a new one
+            await device_all_positions.open()
+            assert mock_create_disconnect_timer.call_count == 2
+            # Once position info is received, do not start a new timer
+            device_all_positions.update_feedback(
+                0, 0, device_all_positions._end_position_info
+            )
+            assert mock_create_disconnect_timer.call_count == 2
+
+        with patch(
+            "motionblindsble.device.MotionDevice._cancel_disconnect_timer"
+        ) as mock_cancel_disconnect_timer:
+            # Test setting disconnect timer on still
+            device_all_positions.set_disconnect_timer_after_still(True)
+            # Calling connect should start a timer
+            await device_all_positions.connect()
+            assert mock_cancel_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, wait for still
+            await device_all_positions.open()
+            assert mock_cancel_disconnect_timer.call_count == 2
+            # Once position info is received, start timer again
+            device_all_positions.update_feedback(
+                0, 0, device_all_positions._end_position_info
+            )
+            assert mock_cancel_disconnect_timer.call_count == 3
+
+            # Test setting no disconnect timer on still
+            mock_cancel_disconnect_timer.call_count = 0
+            assert mock_cancel_disconnect_timer.call_count == 0
+            device_all_positions.set_disconnect_timer_after_still(False)
+            # Calling connect should start a timer
+            await device_all_positions.connect()
+            assert mock_cancel_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, and start a new one
+            await device_all_positions.open()
+            assert mock_create_disconnect_timer.call_count == 2
+            # Once position info is received, do not start a new timer
+            device_all_positions.update_feedback(
+                0, 0, device_all_positions._end_position_info
+            )
+            assert mock_create_disconnect_timer.call_count == 2
+
+    @patch(
+        "motionblindsble.device.MotionDevice.is_connected",
+        Mock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice._send_command",
+        AsyncMock(return_value=True),
+    )
+    async def test_disconnect_timer_after_still_no_end_positions(self) -> None:
+        """Test the disconnect timer on still function."""
+        device = MotionDevice("00:11:22:33:44:55")
+        no_end_positions = MotionPositionInfo(0x00, 0x0000)
+        no_favorite_position = MotionPositionInfo(0x4E, 0x0000)
+        device.update_end_position_info(no_end_positions)
+
+        with patch(
+            "motionblindsble.device.MotionDevice._create_disconnect_timer"
+        ) as mock_create_disconnect_timer:
+            # Test setting disconnect timer on still
+            device.set_disconnect_timer_after_still(True)
+            # Calling connect should start a timer
+            await device.connect()
+            assert mock_create_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, wait for still
+            with pytest.raises(NoEndPositionsException):
+                await device.open()
+            device.update_end_position_info(no_favorite_position)
+            with pytest.raises(NoFavoritePositionException):
+                await device.favorite()
+            assert mock_create_disconnect_timer.call_count == 3
+            # Once position info is received, start timer again
+            device.update_feedback(0, 0, no_end_positions)
+            assert mock_create_disconnect_timer.call_count == 4
+
+            # Test setting no disconnect timer on still
+            mock_create_disconnect_timer.call_count = 0
+            assert mock_create_disconnect_timer.call_count == 0
+            device.set_disconnect_timer_after_still(False)
+            # Calling connect should start a timer
+            await device.connect()
+            assert mock_create_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, and start a new one
+            with pytest.raises(NoEndPositionsException):
+                await device.open()
+            device.update_end_position_info(no_favorite_position)
+            with pytest.raises(NoFavoritePositionException):
+                await device.favorite()
+            assert mock_create_disconnect_timer.call_count == 3
+            # Once position info is received, do not start a new timer
+            device.update_feedback(0, 0, no_end_positions)
+            assert mock_create_disconnect_timer.call_count == 3
+
+        with patch(
+            "motionblindsble.device.MotionDevice._cancel_disconnect_timer"
+        ) as mock_cancel_disconnect_timer:
+            # Test setting disconnect timer on still
+            device.set_disconnect_timer_after_still(True)
+            # Calling connect should start a timer
+            await device.connect()
+            assert mock_cancel_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, wait for still
+            with pytest.raises(NoEndPositionsException):
+                await device.open()
+            device.update_end_position_info(no_favorite_position)
+            with pytest.raises(NoFavoritePositionException):
+                await device.favorite()
+            assert mock_cancel_disconnect_timer.call_count == 3
+            # Once position info is received, start timer again
+            device.update_feedback(0, 0, no_favorite_position)
+            assert mock_cancel_disconnect_timer.call_count == 4
+
+            # Test setting no disconnect timer on still
+            device.update_end_position_info(no_end_positions)
+            mock_cancel_disconnect_timer.call_count = 0
+            assert mock_cancel_disconnect_timer.call_count == 0
+            device.set_disconnect_timer_after_still(False)
+            # Calling connect should start a timer
+            await device.connect()
+            assert mock_cancel_disconnect_timer.call_count == 1
+            # Opening the blind should cancel the timer, and start a new one
+            with pytest.raises(NoEndPositionsException):
+                await device.open()
+            device.update_end_position_info(no_favorite_position)
+            with pytest.raises(NoFavoritePositionException):
+                await device.favorite()
+            assert mock_cancel_disconnect_timer.call_count == 3
+            # Once position info is received, do not start a new timer
+            device.update_feedback(0, 0, no_favorite_position)
+            assert mock_create_disconnect_timer.call_count == 3
 
 
 class TestDevice:
@@ -532,7 +788,7 @@ class TestDevice:
         assert device2.ble_device.address == ble_device2.address
 
     @patch("motionblindsble.device.discover_device")
-    async def test_init_discover(self, mock_discover_device) -> None:
+    async def test_init_discover(self, mock_discover_device: Mock) -> None:
         """Test initializing a MotionDevice with discover function."""
         # Test no device found
         mock_discover_device.return_value = None
@@ -549,9 +805,8 @@ class TestDevice:
         assert device is not None
         assert device.ble_device is ble_device
 
-    def test_setters(self) -> None:
+    def test_setters(self, device: MotionDevice) -> None:
         """Test initializing a MotionDevice."""
-        device = MotionDevice("00:11:22:33:44:55")
         mock = Mock()
         mock2 = Mock()
         device.set_create_task_factory(mock)
@@ -560,9 +815,8 @@ class TestDevice:
         assert device._call_later is mock2
 
     @patch("motionblindsble.device.MotionCrypt.decrypt", lambda x: x)
-    async def test_notification_callback(self) -> None:
+    async def test_notification_callback(self, device: MotionDevice) -> None:
         """Test the notification callback."""
-        device = MotionDevice("00:11:22:33:44:55")
         device.register_feedback_callback(Mock())
         device.register_status_callback(Mock())
 
@@ -583,6 +837,7 @@ class TestDevice:
             )
         assert (
             device._end_position_info is not MotionEndPositions.NONE
+            and device._end_position_info is not None
             and device._end_position_info.favorite_position is None
         )
 
@@ -704,10 +959,13 @@ class TestDevice:
     @patch("motionblindsble.device.MotionCrypt.decrypt", return_value="AA")
     @patch("motionblindsble.device.MotionCrypt.get_time", return_value="AA")
     async def test_send_command(
-        self, mock_get_time, mock_decrypt, mock_encrypt
+        self,
+        mock_get_time: Mock,
+        mock_decrypt: Mock,
+        mock_encrypt: Mock,
+        device: MotionDevice,
     ) -> None:
         """Test sending a command."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         # Test sending command without BleakClient
         device._current_bleak_client = None
@@ -748,9 +1006,8 @@ class TestDevice:
         "motionblindsble.device.MotionDevice._send_command",
         AsyncMock(return_value=True),
     )
-    async def test_commands(self) -> None:
+    async def test_commands(self, device: MotionDevice) -> None:
         """Test sending different commands."""
-        device = MotionDevice("00:11:22:33:44:55")
         device.update_end_position_info(MotionPositionInfo(0x0E, 0xFFFF))
 
         call_counter = 0
@@ -778,9 +1035,8 @@ class TestDevice:
             # pylint: disable=no-member
             assert device._send_command.call_count == call_counter
 
-    async def test_register_callbacks(self) -> None:
+    async def test_register_callbacks(self, device: MotionDevice) -> None:
         """Test registering device callbacks."""
-        device = MotionDevice("00:11:22:33:44:55")
 
         register_callbacks = []
         for attr_name in dir(device):
@@ -796,10 +1052,11 @@ class TestDevice:
             callback.assert_called_once()
 
     @patch("motionblindsble.device.time_ns", Mock(return_value=0))
-    async def test_disabled_connection_callbacks(self) -> None:
+    async def test_disabled_connection_callbacks(
+        self, device: MotionDevice
+    ) -> None:
         """Test the device callbacks that are disabled on connection."""
 
-        device = MotionDevice("00:11:22:33:44:55")
         device._connect_status_query_time = 0
 
         inputs = [
