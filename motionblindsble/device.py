@@ -770,11 +770,12 @@ class MotionDevice:
         command = MotionCrypt.encrypt(
             command_prefix + MotionCrypt.get_time(self.timezone)
         )
-        _LOGGER.debug(
-            "(%s) Sending message: %s",
-            self.ble_device.address,
-            MotionCrypt.decrypt(command),
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "(%s) Sending message: %s",
+                self.ble_device.address,
+                MotionCrypt.decrypt(command),
+            )
         # response=False to solve Unlikely Error: [org.bluez.Error.Failed]
         # Operation failed with ATT error: 0x0e (Unlikely Error)
         # response=True: 0.20s, response=False: 0.0005s
@@ -789,11 +790,12 @@ class MotionDevice:
                         response=True,
                     )
                     after_time = time()
-                    _LOGGER.debug(
-                        "(%s) Received response in %.2fs",
-                        self.ble_device.address,
-                        after_time - before_time,
-                    )
+                    if _LOGGER.isEnabledFor(logging.DEBUG):
+                        _LOGGER.debug(
+                            "(%s) Received response in %.2fs",
+                            self.ble_device.address,
+                            after_time - before_time,
+                        )
                     return True
                 return False
             except BleakError as e:
@@ -1090,9 +1092,10 @@ class MotionDevice:
                 # Cancel disconnect timer
                 _LOGGER.debug(
                     (
-                        "Cancelling disconnect timer (blind is running"
+                        "(%s) Cancelling disconnect timer (blind is running"
                         " and disconnect_timer_after_still is enabled)"
-                    )
+                    ),
+                    self.ble_device.address,
                 )
                 self._cancel_disconnect_timer()
         if self._is_connection_callback_disabled(MotionCallback.RUNNING):
