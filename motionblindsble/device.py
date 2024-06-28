@@ -536,7 +536,7 @@ class MotionDevice:
 
         if self._call_later:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2fs"
+                "(%s) Refreshing disconnect timer to %.2fs"
                 " using call_later",
                 self.ble_device.address,
                 _timeout,
@@ -546,7 +546,7 @@ class MotionDevice:
             )  # type: ignore[call-arg]
         else:
             _LOGGER.debug(
-                "(%s) Refreshing disconnect timeout to %.2f",
+                "(%s) Refreshing disconnect timer to %.2fs",
                 self.ble_device.address,
                 _timeout,
             )
@@ -555,7 +555,7 @@ class MotionDevice:
             )
 
     def _cancel_disconnect_timer(self) -> None:
-        """Cancel the disconnect timeout."""
+        """Cancel the disconnect timer."""
         if self._disconnect_timer:
             # Cancel current timeout
             if callable(self._disconnect_timer):
@@ -1075,6 +1075,12 @@ class MotionDevice:
                 MotionRunningType.UNKNOWN,
             }:
                 # Cancel disconnect timer
+                _LOGGER.debug(
+                    (
+                        "Cancelling disconnect timer (blind is running"
+                        " and disconnect_timer_after_still is enabled)"
+                    )
+                )
                 self._cancel_disconnect_timer()
         if self._is_connection_callback_disabled(MotionCallback.RUNNING):
             return
@@ -1332,7 +1338,7 @@ class MotionDevice:
 
 
 class NoEndPositionsException(Exception):
-    """Exception to indicate the blind's endpositions must be set."""
+    """Exception to indicate the blind's end positions must be set."""
 
 
 class NoFavoritePositionException(Exception):
