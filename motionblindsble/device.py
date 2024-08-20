@@ -195,11 +195,11 @@ class MotionEndPositions(IntEnum):
     def from_hex(cls, hex_value: int) -> MotionEndPositions:
         """Return the number of end positions set."""
         return {
-            0b001: cls.NONE,  # e.g. 0x02
-            0b011: cls.ONE,
-            0b101: cls.ONE,
-            0b111: cls.BOTH,  # e.g. 0x0E or 0x4E
-        }.get((hex_value & 0xF) >> 1, cls.UNKNOWN)
+            0b00: cls.NONE,  # e.g. 0x02 or 0x00
+            0b01: cls.ONE,
+            0b10: cls.ONE,
+            0b11: cls.BOTH,  # e.g. 0x0E or 0x4E or 0x0C
+        }.get((hex_value & 0xF) >> 2, cls.UNKNOWN)
 
 
 @dataclass
