@@ -186,7 +186,6 @@ def requires_favorite_position(func: Callable) -> Callable:
 class MotionEndPositions(IntEnum):
     """Information on how many end positions are set."""
 
-    UNKNOWN = -1
     NONE = 0
     ONE = 1
     BOTH = 2
@@ -194,12 +193,7 @@ class MotionEndPositions(IntEnum):
     @classmethod
     def from_hex(cls, hex_value: int) -> MotionEndPositions:
         """Return the number of end positions set."""
-        return {
-            0b00: cls.NONE,  # e.g. 0x02 or 0x00
-            0b01: cls.ONE,
-            0b10: cls.ONE,
-            0b11: cls.BOTH,  # e.g. 0x0E or 0x4E or 0x0C
-        }.get((hex_value & 0xF) >> 2, cls.UNKNOWN)
+        return [cls.NONE, cls.ONE, cls.ONE, cls.BOTH][(hex_value & 0xF) >> 2]
 
 
 @dataclass
