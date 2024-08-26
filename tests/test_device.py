@@ -66,7 +66,7 @@ class TestDeviceDecorators:
                 # Set end positions after Event.wait() is called
                 device.update_end_position_info(
                     MotionPositionInfo(
-                        0x0E, 0xFFFF
+                        0x0C, 0xFFFF
                     )  # Simulating end positions being set
                 )
 
@@ -593,7 +593,7 @@ class TestDevice:
             None,
             bytearray.fromhex(
                 MotionNotificationType.FEEDBACK.value
-                + "0e"
+                + "0C"
                 + "00"
                 + "00"
                 + "00"
