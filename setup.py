@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="motionblindsble",
-    version="{{VERSION_PLACEHOLDER}}",
+    version="0.1.1",
     description=(
         "Python library for interfacing with Motionblinds"
         " using Bluetooth Low Energy (BLE)."
