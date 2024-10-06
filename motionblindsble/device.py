@@ -742,7 +742,7 @@ class MotionDevice:
                     await self._current_bleak_client.write_gatt_char(
                         str(MotionCharacteristic.COMMAND.value),
                         bytes.fromhex(command),
-                        response=True,
+                        response=False,
                     )
                     after_time = time()
                     _LOGGER.debug(
