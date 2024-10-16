@@ -77,7 +77,7 @@ def requires_connection(
             ):
                 return False
             import asyncio
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
             return await func(self, *args, **kwargs)
 
         return wrapper
