@@ -708,7 +708,7 @@ class MotionDevice:
 
         self.refresh_disconnect_timer()
 
-        await sleep(0.1)
+        await sleep(0.2)
 
         return True
 
