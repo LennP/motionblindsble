@@ -76,8 +76,6 @@ def requires_connection(
                 )
             ):
                 return False
-            import asyncio
-            await asyncio.sleep(0.1)
             return await func(self, *args, **kwargs)
 
         return wrapper
@@ -709,6 +707,8 @@ class MotionDevice:
         await self.status_query()
 
         self.refresh_disconnect_timer()
+
+        # await sleep(0.1)
 
         return True
 
