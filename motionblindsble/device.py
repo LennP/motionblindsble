@@ -708,6 +708,9 @@ class MotionDevice:
 
         self.refresh_disconnect_timer()
 
+        # Sleep to wait for motor to finish processing
+        await sleep(0.2)
+
         return True
 
     def is_connected(self) -> bool:
