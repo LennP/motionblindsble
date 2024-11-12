@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 import pytest
 from motionblindsble.device import (
     SETTING_CALIBRATION_DISCONNECT_TIME,
+    SETTING_CONNECTION_DELAY,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
@@ -306,7 +307,12 @@ class TestDeviceConnection:
             mock_sleep.reset_mock()
             device.blind_type = blind_type
             await device.establish_connection()
-            mock_sleep.assert_called_once_with(SETTING_NOTIFICATION_DELAY)
+            mock_sleep.assert_has_calls(
+                [
+                    call(SETTING_NOTIFICATION_DELAY),
+                    call(SETTING_CONNECTION_DELAY),
+                ]
+            )
 
         for blind_type in [
             MotionBlindType.ROLLER,
@@ -319,7 +325,7 @@ class TestDeviceConnection:
             mock_sleep.reset_mock()
             device.blind_type = blind_type
             await device.establish_connection()
-            assert mock_sleep.call_count == 0
+            mock_sleep.assert_has_calls([call(SETTING_CONNECTION_DELAY)])
 
     @patch("motionblindsble.device.MotionDevice.is_connected")
     @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")

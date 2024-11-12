@@ -38,6 +38,7 @@ from .const import (
     EXCEPTION_NO_FAVORITE_POSITION,
     EXCEPTION_NOT_CALIBRATED,
     SETTING_CALIBRATION_DISCONNECT_TIME,
+    SETTING_CONNECTION_DELAY,
     SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
@@ -220,15 +221,13 @@ class MotionPositionInfo:
 class CreateTask(Protocol):
     """Create task protocol."""
 
-    def __call__(self, target: Coroutine):
-        ...  # pragma: no cover
+    def __call__(self, target: Coroutine): ...  # pragma: no cover
 
 
 class CallLater(Protocol):
     """Call later protocol."""
 
-    def __call__(self, target: Coroutine) -> Callable:
-        ...  # pragma: no cover
+    def __call__(self, target: Coroutine) -> Callable: ...  # pragma: no cover
 
 
 class ConnectionQueue:
@@ -709,7 +708,7 @@ class MotionDevice:
         self.refresh_disconnect_timer()
 
         # Sleep to wait for motor to finish processing
-        await sleep(0.2)
+        await sleep(SETTING_CONNECTION_DELAY)
 
         return True
 
@@ -939,12 +938,16 @@ class MotionDevice:
             is_charging,
             is_wired,
             speed_level.name if speed_level is not None else None,
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
+            (
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None
+            ),
+            (
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None
+            ),
         )
         self.update_position(position, tilt)
         self.update_battery(battery_percentage, is_charging, is_wired)
@@ -978,12 +981,16 @@ class MotionDevice:
             self.ble_device.address,
             str(position),
             str(tilt),
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
+            (
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None
+            ),
+            (
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None
+            ),
         )
         self.update_position(position, tilt)
         self.update_end_position_info(end_position_info)
@@ -1084,12 +1091,16 @@ class MotionDevice:
                 "favorite position set: %s"
             ),
             self.ble_device.address,
-            end_position_info.end_positions.name
-            if end_position_info is not None
-            else None,
-            end_position_info.favorite_position
-            if end_position_info is not None
-            else None,
+            (
+                end_position_info.end_positions.name
+                if end_position_info is not None
+                else None
+            ),
+            (
+                end_position_info.favorite_position
+                if end_position_info is not None
+                else None
+            ),
         )
         self._end_position_info = end_position_info
         self.update_calibration(
