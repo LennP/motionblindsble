@@ -706,7 +706,7 @@ class MotionDevice:
 
         self.refresh_disconnect_timer()
 
-        # Sleep to wait for motor to finish processing
+        # Wait for motor to receive status
         await self._received_end_position_info_event.wait()
 
         return True
