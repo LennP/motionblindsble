@@ -7,9 +7,9 @@ from typing import Callable
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+
 from motionblindsble.device import (
     SETTING_CALIBRATION_DISCONNECT_TIME,
-    SETTING_CONNECTION_DELAY,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
@@ -278,6 +278,10 @@ class TestDeviceConnection:
         "motionblindsble.device.establish_connection",
         AsyncMock(return_value=AsyncMock()),
     )
+    @patch(
+        "motionblindsble.device.Event.wait",
+        AsyncMock(return_value=None),
+    )
     @patch("motionblindsble.device.sleep")
     @patch("motionblindsble.device.MotionDevice.update_connection")
     async def test_establish_connection(
@@ -310,7 +314,6 @@ class TestDeviceConnection:
             mock_sleep.assert_has_calls(
                 [
                     call(SETTING_NOTIFICATION_DELAY),
-                    call(SETTING_CONNECTION_DELAY),
                 ]
             )
 
@@ -325,7 +328,6 @@ class TestDeviceConnection:
             mock_sleep.reset_mock()
             device.blind_type = blind_type
             await device.establish_connection()
-            mock_sleep.assert_has_calls([call(SETTING_CONNECTION_DELAY)])
 
     @patch("motionblindsble.device.MotionDevice.is_connected")
     @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")
@@ -407,6 +409,10 @@ class TestDeviceConnection:
     @patch(
         "motionblindsble.crypt.MotionCrypt.get_time",
         Mock(return_value=""),
+    )
+    @patch(
+        "motionblindsble.device.Event.wait",
+        AsyncMock(return_value=None),
     )
     @patch("motionblindsble.device.MotionDevice.disconnect")
     @patch("motionblindsble.device.time_ns")
