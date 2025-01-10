@@ -38,7 +38,6 @@ from .const import (
     EXCEPTION_NO_FAVORITE_POSITION,
     EXCEPTION_NOT_CALIBRATED,
     SETTING_CALIBRATION_DISCONNECT_TIME,
-    SETTING_CONNECTION_DELAY,
     SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
@@ -708,7 +707,7 @@ class MotionDevice:
         self.refresh_disconnect_timer()
 
         # Sleep to wait for motor to finish processing
-        await sleep(SETTING_CONNECTION_DELAY)
+        await self._received_end_position_info_event.wait()
 
         return True
 
