@@ -18,7 +18,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/LennP/motionblindsble",
     author="LennP",
-    author_email="lennperik@hotmail.nl",
+    author_email="lennperik@hotmail.com",
     license="MIT",
     packages=find_packages(exclude=["tests*"]),
     python_requires=">=3.9",
