@@ -12,6 +12,7 @@ from motionblindsble.device import (
     SETTING_CONNECTION_DELAY,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
+    SETTING_MAX_STATUS_QUERY_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
     BleakError,
     BleakNotFoundError,
@@ -285,6 +286,10 @@ class TestDeviceConnection:
     ) -> None:
         """Test the establish_connection function."""
         device = MotionDevice("00:11:22:33:44:55")
+        # Simulate the status notification arriving so the status query wait
+        # resolves immediately.
+        device._received_end_position_info_event = Mock()
+        device._received_end_position_info_event.wait = AsyncMock()
 
         # Test establish normal connection
         await device.establish_connection()
@@ -326,6 +331,49 @@ class TestDeviceConnection:
             device.blind_type = blind_type
             await device.establish_connection()
             mock_sleep.assert_has_calls([call(SETTING_CONNECTION_DELAY)])
+
+    @patch(
+        "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
+        Mock(),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice.disconnect",
+        AsyncMock(),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice.status_query",
+        AsyncMock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.MotionDevice._send_command",
+        AsyncMock(return_value=True),
+    )
+    @patch(
+        "motionblindsble.device.establish_connection",
+        AsyncMock(return_value=AsyncMock()),
+    )
+    @patch("motionblindsble.device.sleep", AsyncMock())
+    @patch(
+        "motionblindsble.device.wait_for",
+        AsyncMock(side_effect=asyncio.TimeoutError),
+    )
+    async def test_establish_connection_status_query_retry(self) -> None:
+        """Test that a missing status notification retries the status query
+        and then aborts the connection instead of hanging."""
+        device = MotionDevice("00:11:22:33:44:55")
+        device.blind_type = MotionBlindType.ROLLER
+        # Replace the event so the (mocked) wait_for never builds a real,
+        # un-awaited coroutine.
+        device._received_end_position_info_event = Mock()
+
+        result = await device.establish_connection()
+
+        # pylint: disable=no-member
+        assert result is False
+        assert (
+            device.status_query.call_count == SETTING_MAX_STATUS_QUERY_ATTEMPTS
+        )
+        device.disconnect.assert_awaited_once()
 
     @patch("motionblindsble.device.MotionDevice.is_connected")
     @patch("motionblindsble.device.ConnectionQueue.wait_for_connection")

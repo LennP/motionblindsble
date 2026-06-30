@@ -9,6 +9,12 @@ SETTING_CALIBRATION_DISCONNECT_TIME = 45  # Seconds
 SETTING_NOTIFICATION_DELAY = 0.5  # Seconds
 SETTING_CONNECTION_DELAY = 0.2  # Seconds
 SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME = 2  # Seconds
+# Number of times the status query is retried after connecting if the motor
+# does not respond with a status notification, and how long to wait for each.
+SETTING_MAX_STATUS_QUERY_ATTEMPTS = 3
+SETTING_STATUS_QUERY_TIMEOUT = 3  # Seconds
+# Upper bound for a command waiting on end position info (safety net).
+SETTING_END_POSITION_INFO_TIMEOUT = 15  # Seconds
 
 DISPLAY_NAME = "Motionblind {mac_code}"
 

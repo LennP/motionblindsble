@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from asyncio import (
     FIRST_COMPLETED,
@@ -13,6 +14,7 @@ from asyncio import (
     get_event_loop,
     sleep,
     wait,
+    wait_for,
 )
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -41,9 +43,12 @@ from .const import (
     SETTING_CONNECTION_DELAY,
     SETTING_DISABLE_CONNECT_STATUS_CALLBACK_TIME,
     SETTING_DISCONNECT_TIME,
+    SETTING_END_POSITION_INFO_TIMEOUT,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_MAX_CONNECT_ATTEMPTS,
+    SETTING_MAX_STATUS_QUERY_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
+    SETTING_STATUS_QUERY_TIMEOUT,
     MotionBlindType,
     MotionCalibrationType,
     MotionCallback,
@@ -105,8 +110,22 @@ def requires_end_positions(
         async def wrapper(self: MotionDevice, *args, **kwargs):
             # pylint: disable=protected-access
             if self._end_position_info is None:
-                # Wait for end position info to be set by notification
-                await self._received_end_position_info_event.wait()
+                # Wait for end position info to be set by notification.
+                # Bounded so a missing status notification cannot block the
+                # command forever (see HA core issue #153218).
+                try:
+                    await wait_for(
+                        self._received_end_position_info_event.wait(),
+                        timeout=SETTING_END_POSITION_INFO_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    _LOGGER.error(
+                        "(%s) Did not receive status notification, "
+                        "aborting command",
+                        self.ble_device.address,
+                    )
+                    self.update_running(MotionRunningType.STILL)
+                    return False
 
             if self.blind_type is MotionBlindType.CURTAIN:
                 # Curtain blinds can auto-calibrate and find end positions
@@ -693,17 +712,44 @@ class MotionDevice:
         # Used to initialize
         await self.set_key()
 
-        if self.blind_type in [
-            MotionBlindType.CURTAIN,
-            MotionBlindType.VERTICAL,
-        ]:
-            await sleep(SETTING_NOTIFICATION_DELAY)
+        # Give the motor a moment to process the set_key command before
+        # querying status. Previously this was only done for CURTAIN/VERTICAL
+        # blinds; doing it for all blind types reduces how often the first
+        # status query is dropped (see HA core issue #153218).
+        await sleep(SETTING_NOTIFICATION_DELAY)
 
         # Set the point (used after calibrating Curtain)
         # await self.point_set_query()
 
+        # Query status and wait for the motor's status notification, retrying
+        # if it is not received. The notification sets
+        # _received_end_position_info_event via update_status(). Without a
+        # retry, a dropped status query leaves the connection without end
+        # position info and any command will hang (see HA core issue #153218).
         self._connect_status_query_time = time_ns()
-        await self.status_query()
+        self._received_end_position_info_event.clear()
+        for attempt in range(SETTING_MAX_STATUS_QUERY_ATTEMPTS):
+            await self.status_query()
+            try:
+                await wait_for(
+                    self._received_end_position_info_event.wait(),
+                    timeout=SETTING_STATUS_QUERY_TIMEOUT,
+                )
+                break
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    "(%s) No status notification (attempt #%i), "
+                    "retrying status query",
+                    self.ble_device.address,
+                    attempt,
+                )
+        else:
+            _LOGGER.error(
+                "(%s) Did not receive status after connecting, disconnecting",
+                self.ble_device.address,
+            )
+            await self.disconnect()
+            return False
 
         self.refresh_disconnect_timer()
 
