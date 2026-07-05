@@ -7,6 +7,7 @@ from typing import Callable
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+
 from motionblindsble.device import (
     SETTING_CALIBRATION_DISCONNECT_TIME,
     SETTING_CONNECTION_DELAY,
@@ -162,7 +163,7 @@ class TestDeviceDecorators:
 class TestDeviceConnection:
     """Test the ConnectionQueue & establish_connection in device.py module."""
 
-    def test_create_connection_task(self) -> None:
+    async def test_create_connection_task(self) -> None:
         """Test the creation of a connection task."""
         connection_queue = ConnectionQueue()
         device = MotionDevice("00:11:22:33:44:55")
