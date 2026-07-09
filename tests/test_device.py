@@ -13,6 +13,7 @@ from motionblindsble.device import (
     SETTING_CONNECTION_DELAY,
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
+    SETTING_MAX_STATUS_QUERY_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
     BleakError,
     BleakNotFoundError,
@@ -114,6 +115,44 @@ class TestDeviceDecorators:
         mock_refresh_disconnect_timer.assert_called_once_with(
             SETTING_CALIBRATION_DISCONNECT_TIME
         )
+
+    @patch(
+        "motionblindsble.device.MotionDevice.status_query",
+        AsyncMock(return_value=True),
+    )
+    async def test_requires_end_positions_retries_status_query(self) -> None:
+        """Test the @requires_end_positions decorator retrying the status
+        query if the status notification is not received."""
+        device = MotionDevice("00:11:22:33:44:55")
+        # Replace the event so the mocked wait_for does not leave an
+        # un-awaited Event.wait() coroutine behind
+        device._received_end_position_info_event = Mock()
+
+        @requires_end_positions
+        async def mock_method(self):
+            return True
+
+        # Test status notification received after one retry
+        with patch(
+            "motionblindsble.device.wait_for",
+            AsyncMock(side_effect=[asyncio.TimeoutError, None]),
+        ):
+            assert await mock_method(device)
+        # pylint: disable=no-member
+        assert device.status_query.call_count == 1
+
+        # Test command aborts if no status notification is ever received
+        device.status_query.reset_mock()
+        with patch(
+            "motionblindsble.device.wait_for",
+            AsyncMock(side_effect=asyncio.TimeoutError),
+        ):
+            assert not await mock_method(device)
+        assert (
+            device.status_query.call_count
+            == SETTING_MAX_STATUS_QUERY_ATTEMPTS - 1
+        )
+        assert device._running_type is MotionRunningType.STILL
 
     @patch(
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",

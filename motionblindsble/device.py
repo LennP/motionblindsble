@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from asyncio import (
     FIRST_COMPLETED,
@@ -13,6 +14,7 @@ from asyncio import (
     get_event_loop,
     sleep,
     wait,
+    wait_for,
 )
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -43,7 +45,9 @@ from .const import (
     SETTING_DISCONNECT_TIME,
     SETTING_MAX_COMMAND_ATTEMPTS,
     SETTING_MAX_CONNECT_ATTEMPTS,
+    SETTING_MAX_STATUS_QUERY_ATTEMPTS,
     SETTING_NOTIFICATION_DELAY,
+    SETTING_STATUS_QUERY_TIMEOUT,
     MotionBlindType,
     MotionCalibrationType,
     MotionCallback,
@@ -105,8 +109,33 @@ def requires_end_positions(
         async def wrapper(self: MotionDevice, *args, **kwargs):
             # pylint: disable=protected-access
             if self._end_position_info is None:
-                # Wait for end position info to be set by notification
-                await self._received_end_position_info_event.wait()
+                # Wait for end position info to be set by notification,
+                # retrying the status query if the motor does not respond
+                # to it (see HA core issue #153218)
+                for attempt in range(SETTING_MAX_STATUS_QUERY_ATTEMPTS):
+                    if attempt > 0:
+                        await self.status_query()
+                    try:
+                        await wait_for(
+                            self._received_end_position_info_event.wait(),
+                            timeout=SETTING_STATUS_QUERY_TIMEOUT,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        _LOGGER.warning(
+                            "(%s) Status notification not received"
+                            " (attempt #%i)",
+                            self.ble_device.address,
+                            attempt + 1,
+                        )
+                else:
+                    _LOGGER.error(
+                        "(%s) Did not receive end position info,"
+                        " aborting command",
+                        self.ble_device.address,
+                    )
+                    self.update_running(MotionRunningType.STILL)
+                    return False
 
             if self.blind_type is MotionBlindType.CURTAIN:
                 # Curtain blinds can auto-calibrate and find end positions
