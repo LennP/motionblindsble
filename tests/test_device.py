@@ -41,6 +41,10 @@ from motionblindsble.device import (
 class TestDeviceDecorators:
     """Test the decorators in device.py module."""
 
+    @patch(
+        "motionblindsble.device.MotionDevice.status_query",
+        AsyncMock(return_value=True),
+    )
     @patch("motionblindsble.device.MotionDevice.refresh_disconnect_timer")
     @patch("motionblindsble.device.MotionDevice.update_calibration")
     async def test_requires_end_positions(
@@ -120,8 +124,9 @@ class TestDeviceDecorators:
         AsyncMock(return_value=True),
     )
     async def test_requires_end_positions_retries_status_query(self) -> None:
-        """Test the @requires_end_positions decorator retrying the status
-        query if the status notification is not received."""
+        """Test the @requires_end_positions decorator waiting on the status
+        query task, which retries the status query if the status
+        notification is not received."""
         device = MotionDevice("00:11:22:33:44:55")
         # Replace the event so the mocked wait_for does not leave an
         # un-awaited Event.wait() coroutine behind
@@ -138,7 +143,7 @@ class TestDeviceDecorators:
         ):
             assert await mock_method(device)
         # pylint: disable=no-member
-        assert device.status_query.call_count == 1
+        assert device.status_query.call_count == 2
 
         # Test command aborts if no status notification is ever received
         device.status_query.reset_mock()
@@ -148,10 +153,35 @@ class TestDeviceDecorators:
         ):
             assert not await mock_method(device)
         assert (
-            device.status_query.call_count
-            == SETTING_MAX_STATUS_QUERY_ATTEMPTS - 1
+            device.status_query.call_count == SETTING_MAX_STATUS_QUERY_ATTEMPTS
         )
         assert device._running_type is MotionRunningType.STILL
+
+        # Test commands waiting concurrently share one status query task
+        device.status_query.reset_mock()
+        with patch(
+            "motionblindsble.device.wait_for",
+            AsyncMock(side_effect=[asyncio.TimeoutError, None]),
+        ):
+            results = await asyncio.gather(
+                mock_method(device), mock_method(device)
+            )
+        assert results == [True, True]
+        assert device.status_query.call_count == 2
+
+        # Test command aborts if the status query task is cancelled,
+        # such as on disconnect
+        device.status_query.reset_mock()
+        with patch(
+            "motionblindsble.device.wait_for",
+            AsyncMock(side_effect=asyncio.TimeoutError),
+        ):
+            command_task = asyncio.get_event_loop().create_task(
+                mock_method(device)
+            )
+            await asyncio.sleep(0)
+            device._cancel_status_query_task()
+            assert not await command_task
 
     @patch(
         "motionblindsble.device.MotionDevice.refresh_disconnect_timer",
@@ -317,6 +347,10 @@ class TestDeviceConnection:
         "motionblindsble.device.establish_connection",
         AsyncMock(return_value=AsyncMock()),
     )
+    @patch(
+        "motionblindsble.device.MotionDevice._create_status_query_task",
+        Mock(),
+    )
     @patch("motionblindsble.device.sleep")
     @patch("motionblindsble.device.MotionDevice.update_connection")
     async def test_establish_connection(
@@ -329,6 +363,8 @@ class TestDeviceConnection:
         await device.establish_connection()
         # pylint: disable=no-member
         device.refresh_disconnect_timer.assert_called()
+        # The status is queried in a background task on connection
+        device._create_status_query_task.assert_called()
         mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.CONNECTING),
@@ -412,6 +448,9 @@ class TestDeviceConnection:
         # Test disconnecting when connected
         current_bleak_client = AsyncMock()
         device._current_bleak_client = current_bleak_client
+        status_query_task = Mock()
+        status_query_task.done.return_value = False
+        device._status_query_task = status_query_task
 
         def side_effect_disconnect(*args, **kwargs):
             device._disconnect_callback(
@@ -422,6 +461,9 @@ class TestDeviceConnection:
             side_effect_disconnect
         )
         await device.disconnect()
+        # The status query task is cancelled on disconnect
+        status_query_task.cancel.assert_called_once()
+        assert device._status_query_task is None
         mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.DISCONNECTING),

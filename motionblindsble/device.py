@@ -6,12 +6,14 @@ import asyncio
 import logging
 from asyncio import (
     FIRST_COMPLETED,
+    CancelledError,
     Event,
     Future,
     Task,
     TimerHandle,
     create_task,
     get_event_loop,
+    shield,
     sleep,
     wait,
     wait_for,
@@ -109,26 +111,17 @@ def requires_end_positions(
         async def wrapper(self: MotionDevice, *args, **kwargs):
             # pylint: disable=protected-access
             if self._end_position_info is None:
-                # Wait for end position info to be set by notification,
-                # retrying the status query if the motor does not respond
-                # to it (see HA core issue #153218)
-                for attempt in range(SETTING_MAX_STATUS_QUERY_ATTEMPTS):
-                    if attempt > 0:
-                        await self.status_query()
-                    try:
-                        await wait_for(
-                            self._received_end_position_info_event.wait(),
-                            timeout=SETTING_STATUS_QUERY_TIMEOUT,
-                        )
-                        break
-                    except asyncio.TimeoutError:
-                        _LOGGER.warning(
-                            "(%s) Status notification not received"
-                            " (attempt #%i)",
-                            self.ble_device.address,
-                            attempt + 1,
-                        )
-                else:
+                # Wait for the status query task to receive the end
+                # position info from the motor (see HA core issue #153218)
+                status_query_task = self._create_status_query_task()
+                try:
+                    received_status = await shield(status_query_task)
+                except CancelledError:
+                    # The status query task is cancelled on disconnect
+                    if not status_query_task.cancelled():
+                        raise
+                    received_status = False
+                if not received_status:
                     _LOGGER.error(
                         "(%s) Did not receive end position info,"
                         " aborting command",
@@ -347,6 +340,7 @@ class MotionDevice:
     _speed: int | None
     _end_position_info: MotionPositionInfo | None
     _received_end_position_info_event: Event
+    _status_query_task: Task | Any | None
 
     # Disconnection
     _permanent_connection: bool
@@ -439,6 +433,7 @@ class MotionDevice:
         self._disconnect_timer: TimerHandle | Callable | None = None
 
         self._connection_queue = ConnectionQueue()
+        self._status_query_task = None
 
         self._connect_status_query_time = None
         self._disabled_connection_callbacks = []
@@ -639,6 +634,7 @@ class MotionDevice:
     def _disconnect_callback(self, _: BleakClient) -> None:
         """Handle a BleakClient disconnect."""
         _LOGGER.debug("(%s) Disconnected", self.ble_device.address)
+        self._cancel_status_query_task()
         self.update_connection(MotionConnectionType.DISCONNECTED)
         self.update_calibration(None)
         self.update_running(None)
@@ -687,6 +683,7 @@ class MotionDevice:
         """Disconnect from the device."""
         self.update_connection(MotionConnectionType.DISCONNECTING)
         self._cancel_disconnect_timer()
+        self._cancel_status_query_task()
         if self._connection_queue.cancel():
             _LOGGER.debug("(%s) Cancelled connecting", self.ble_device.address)
         if self._current_bleak_client is not None:
@@ -731,8 +728,10 @@ class MotionDevice:
         # Set the point (used after calibrating Curtain)
         # await self.point_set_query()
 
+        # Query the status of the motor in a background task, such that
+        # connecting does not block on the motor responding to it
         self._connect_status_query_time = time_ns()
-        await self.status_query()
+        self._create_status_query_task()
 
         self.refresh_disconnect_timer()
 
@@ -740,6 +739,55 @@ class MotionDevice:
         await sleep(SETTING_CONNECTION_DELAY)
 
         return True
+
+    def _create_status_query_task(self) -> Task | Any:
+        """Return the status query task, creating one if not running."""
+        if self._status_query_task is None or self._status_query_task.done():
+            if self._create_task:
+                # type: ignore[call-arg]
+                self._status_query_task = self._create_task(
+                    target=self._query_status_until_received()
+                )
+            else:
+                self._status_query_task = get_event_loop().create_task(
+                    self._query_status_until_received()
+                )
+        return self._status_query_task
+
+    def _cancel_status_query_task(self) -> None:
+        """Cancel the status query task."""
+        if (
+            self._status_query_task is not None
+            and not self._status_query_task.done()
+        ):
+            self._status_query_task.cancel()
+        self._status_query_task = None
+
+    async def _query_status_until_received(self) -> bool:
+        """Query the status until the motor responds with a status
+        notification, retrying if it does not (see HA core issue #153218).
+
+        Return whether or not the status notification was received.
+        """
+        for attempt in range(SETTING_MAX_STATUS_QUERY_ATTEMPTS):
+            await self.status_query()
+            try:
+                await wait_for(
+                    self._received_end_position_info_event.wait(),
+                    timeout=SETTING_STATUS_QUERY_TIMEOUT,
+                )
+                return True
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    "(%s) Status notification not received (attempt #%i)",
+                    self.ble_device.address,
+                    attempt + 1,
+                )
+        _LOGGER.error(
+            "(%s) Motor did not respond to any status query",
+            self.ble_device.address,
+        )
+        return False
 
     def is_connected(self) -> bool:
         """Return whether or not the device is connected."""
