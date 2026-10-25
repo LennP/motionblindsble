@@ -112,8 +112,8 @@ def requires_end_positions(
             # pylint: disable=protected-access
             if self._end_position_info is None:
                 # Wait for the status query task to receive the end
-                # position info from the motor (see HA core issue #153218)
-                status_query_task = self._create_status_query_task()
+                # position info from the motor
+                status_query_task = self._create_or_get_status_query_task()
                 try:
                     received_status = await shield(status_query_task)
                 except CancelledError:
@@ -731,7 +731,7 @@ class MotionDevice:
         # Query the status of the motor in a background task, such that
         # connecting does not block on the motor responding to it
         self._connect_status_query_time = time_ns()
-        self._create_status_query_task()
+        self._create_or_get_status_query_task()
 
         self.refresh_disconnect_timer()
 
@@ -740,7 +740,7 @@ class MotionDevice:
 
         return True
 
-    def _create_status_query_task(self) -> Task | Any:
+    def _create_or_get_status_query_task(self) -> Task | Any:
         """Return the status query task, creating one if not running."""
         if self._status_query_task is None or self._status_query_task.done():
             if self._create_task:
@@ -765,7 +765,8 @@ class MotionDevice:
 
     async def _query_status_until_received(self) -> bool:
         """Query the status until the motor responds with a status
-        notification, retrying if it does not (see HA core issue #153218).
+        notification, retrying if it does not (the motor sometimes
+        ignores the first status query).
 
         Return whether or not the status notification was received.
         """

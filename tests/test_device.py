@@ -348,7 +348,7 @@ class TestDeviceConnection:
         AsyncMock(return_value=AsyncMock()),
     )
     @patch(
-        "motionblindsble.device.MotionDevice._create_status_query_task",
+        "motionblindsble.device.MotionDevice._create_or_get_status_query_task",
         Mock(),
     )
     @patch("motionblindsble.device.sleep")
@@ -364,7 +364,7 @@ class TestDeviceConnection:
         # pylint: disable=no-member
         device.refresh_disconnect_timer.assert_called()
         # The status is queried in a background task on connection
-        device._create_status_query_task.assert_called()
+        device._create_or_get_status_query_task.assert_called()
         mock_update_connection.assert_has_calls(
             [
                 call(MotionConnectionType.CONNECTING),
